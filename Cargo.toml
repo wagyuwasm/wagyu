@@ -1,0 +1,11 @@
+[workspace]
+resolver = '2'
+package.edition = "2021"
+package.authors = [
+  "Apisit Ritreungroj"
+]
+members = [
+  "wagyu-cli",
+  "wagyu-compiler",
+  "wagyu-runtime",
+]
