@@ -22,11 +22,11 @@ pub(crate) fn parse(src_bin: &[u8]) -> Result<ComponentInstance, Error> {
   }
 
   let mut section_idx = 8;
-  let mut tmp_types = vec![];
-  let mut tmp_imports = vec![];
-  let mut tmp_function_types = vec![];
-  let mut tmp_memories = vec![];
-  let mut tmp_functions = vec![];
+  let mut tmp_types = Vec::new();
+  let mut tmp_imports = Vec::new();
+  let mut tmp_function_types = Vec::new();
+  let mut tmp_memories = Vec::new();
+  let mut tmp_functions = Vec::new();
 
   // Calculates the fixup size of a section if body size is not provided.
   let finalize_section = |section_idx: usize, section_size: u64, fixup_idx: usize| {
@@ -80,8 +80,7 @@ pub(crate) fn parse(src_bin: &[u8]) -> Result<ComponentInstance, Error> {
   
           result_items.push(Type {
             params: param_types,
-            results: result_types,
-            raw: raw_signature
+            results: result_types
           });
   
           type_idx = next_func_idx;
@@ -106,7 +105,7 @@ pub(crate) fn parse(src_bin: &[u8]) -> Result<ComponentInstance, Error> {
 
           let (field_name_len, field_name_len_b) = decode_unsigned_leb128(&src_bin[(import_idx + module_name_len_b + (module_name_len as usize))..]);
           let field_name_idx = import_idx + module_name_len_b + (module_name_len as usize) + field_name_len_b;
-          let field_name = String::from_utf8(Vec::from(&src_bin[field_name_idx..(field_name_idx + (module_name_len as usize))]))
+          let field_name = String::from_utf8(Vec::from(&src_bin[field_name_idx..(field_name_idx + (field_name_len as usize))]))
             .map_err(|err| Error::InvalidValue(format!("{}", err)))?;
 
           let kind_idx = field_name_idx + field_name_len_b;
@@ -181,6 +180,8 @@ pub(crate) fn parse(src_bin: &[u8]) -> Result<ComponentInstance, Error> {
           };
 
           result_items.push(Memory32 {
+            mem: Vec::new(),
+            current_size: 0,
             min: limit_initial as u32,
             max: max.map(|x| x as u32)
           });
@@ -229,7 +230,6 @@ pub(crate) fn parse(src_bin: &[u8]) -> Result<ComponentInstance, Error> {
 
           result_items.push(Function {
             signature_idx: func_type_idx as u32,
-            raw_body: &src_bin[func_idx..(func_idx + body_size_b + 1)],
             parsed_body
           });
 
@@ -253,7 +253,6 @@ pub(crate) fn parse(src_bin: &[u8]) -> Result<ComponentInstance, Error> {
   }
 
   Ok(ComponentInstance {
-    src_bin,
     types: tmp_types,
     imports: tmp_imports,
     memories: tmp_memories,

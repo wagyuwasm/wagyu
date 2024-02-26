@@ -10,5 +10,5 @@ pub(crate) enum ImportKind {
   TypeIdx(u32),
   TableType(RefType, Limit),
   MemType(Limit),
-  GlobalType(ValType, GlobalType), // TODO:
+  GlobalType(ValType, GlobalType),
 }
