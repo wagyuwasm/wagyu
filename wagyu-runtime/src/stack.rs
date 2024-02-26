@@ -1,4 +1,4 @@
-use crate::value::Value;
+use crate::module::value::Value;
 
 pub struct Stack {
   operand: OperandStack,

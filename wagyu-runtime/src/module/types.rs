@@ -1,4 +1,4 @@
-use crate::value::ValType;
+use super::value::ValType;
 
 #[derive(Debug, Clone)]
 pub(crate) struct Type<'a> {
