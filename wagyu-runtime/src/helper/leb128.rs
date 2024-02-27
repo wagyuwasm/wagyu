@@ -17,7 +17,7 @@ use alloc::vec::Vec;
 /// let encoded = encode_unsigned_leb128(value);
 /// assert_eq!(encoded, vec![0x80, 0x01]);
 /// ```
-pub(crate) fn encode_unsigned_leb128<T: Into<u64>>(value: T) -> Vec<u8> {
+pub(crate) fn encode_uleb128<T: Into<u64>>(value: T) -> Vec<u8> {
   let mut bytes: Vec<u8> = Vec::new();
   let mut value: u64 = value.into();
 
@@ -54,7 +54,7 @@ pub(crate) fn encode_unsigned_leb128<T: Into<u64>>(value: T) -> Vec<u8> {
 /// assert_eq!(decoded, 128);
 /// assert_eq!(count, 2);
 /// ```
-pub(crate) fn decode_unsigned_leb128(bytes: &[u8]) -> (u64, usize) {
+pub(crate) fn decode_uleb128(bytes: &[u8]) -> (u64, usize) {
   let mut result: u64 = 0;
   let mut shift = 0;
   let mut count = 0;
@@ -88,7 +88,7 @@ pub(crate) fn decode_unsigned_leb128(bytes: &[u8]) -> (u64, usize) {
 /// let encoded = encode_signed_leb128(value);
 /// assert_eq!(encoded, vec![0x9B, 0xF1, 0x59]);
 /// ```
-pub(crate) fn encode_signed_leb128<T: Into<i64>>(value: T) -> Vec<u8> {
+pub(crate) fn encode_sleb128<T: Into<i64>>(value: T) -> Vec<u8> {
   let mut bytes = Vec::new();
   let mut value: i64 = value.into();
     
@@ -128,7 +128,7 @@ pub(crate) fn encode_signed_leb128<T: Into<i64>>(value: T) -> Vec<u8> {
 /// assert_eq!(decoded, -624485);
 /// assert_eq!(count, 3);
 /// ```
-pub(crate) fn decode_signed_leb128(bytes: &[u8]) -> (i64, usize) {
+pub(crate) fn decode_sleb128(bytes: &[u8]) -> (i64, usize) {
   let mut result: i64 = 0;
   let mut shift: usize = 0;
   let mut count: usize = 0;
@@ -164,7 +164,7 @@ mod tests {
     ];
 
     for (input, expected_output) in test_cases {
-      let encoded = encode_unsigned_leb128(input);
+      let encoded = encode_uleb128(input);
       assert_eq!(encoded, expected_output);
     }
   }
@@ -180,7 +180,7 @@ mod tests {
 		];
 
 		for (input, (expected_value, expected_count)) in test_cases {
-			let (decoded_value, decoded_count) = decode_unsigned_leb128(&input);
+			let (decoded_value, decoded_count) = decode_uleb128(&input);
 			assert_eq!(decoded_value, expected_value);
 			assert_eq!(decoded_count, expected_count);
 		}
@@ -199,7 +199,7 @@ mod tests {
     ];
 
     for (input, expected_output) in test_cases {
-      let encoded = encode_signed_leb128(input);
+      let encoded = encode_sleb128(input);
       assert_eq!(encoded, expected_output);
     }
   }
@@ -218,7 +218,7 @@ mod tests {
 		];
 
 		for (input, (expected_value, expected_count)) in test_cases {
-			let (decoded_value, decoded_count) = decode_signed_leb128(&input);
+			let (decoded_value, decoded_count) = decode_sleb128(&input);
 			assert_eq!(decoded_value, expected_value);
 			assert_eq!(decoded_count, expected_count);
 		}

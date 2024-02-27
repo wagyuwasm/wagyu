@@ -3,7 +3,7 @@ use alloc::vec::Vec;
 use core::ptr;
 use core::ops::Range;
 
-use crate::{helper::leb128::decode_unsigned_leb128, instance::ModuleInstance, module::{export::Export, function::{Function, ParsedBody}, global::Global, import::{Import, ImportKind}, memory::Memory32, types::Type, value::{ExportDesc, GlobalMut, ValType}}};
+use crate::{helper::leb128::decode_uleb128, instance::ModuleInstance, module::{export::Export, function::{Function, ParsedBody}, global::Global, import::{Import, ImportKind}, memory::Memory32, types::Type, value::{ExportDesc, GlobalMut, ValType}}};
 
 pub enum Error {
   InvalidBinaryMagic,
@@ -40,7 +40,7 @@ pub(crate) fn parse(src_bin: &[u8]) -> Result<ModuleInstance, Error> {
   let finalize_section = |section_ofs: usize, section_size: u64, fixup_ofs: usize| {
     match section_size {
       0 => {
-        let (_, fixup_size_b) = decode_unsigned_leb128(&src_bin[fixup_ofs..]);
+        let (_, fixup_size_b) = decode_uleb128(&src_bin[fixup_ofs..]);
 
         fixup_ofs + fixup_size_b
       },
@@ -67,8 +67,8 @@ pub(crate) fn parse(src_bin: &[u8]) -> Result<ModuleInstance, Error> {
       },
       // type section
       1 => {
-        let (section_size, section_size_b) = decode_unsigned_leb128(&src_bin[(section_ofs + 1)..]);
-        let (n_item, n_item_b) = decode_unsigned_leb128(&src_bin[(section_ofs + section_size_b + 1)..]);
+        let (section_size, section_size_b) = decode_uleb128(&src_bin[(section_ofs + 1)..]);
+        let (n_item, n_item_b) = decode_uleb128(&src_bin[(section_ofs + section_size_b + 1)..]);
 
         let parse_type = |range: Range<usize>| {
           range
@@ -84,8 +84,8 @@ pub(crate) fn parse(src_bin: &[u8]) -> Result<ModuleInstance, Error> {
               return Err(Error::InvalidValue(format!("not func type")));
             }
 
-            let (n_param, n_param_b) = decode_unsigned_leb128(&src_bin[(item_ofs + 1)..]);
-            let (n_result, n_result_b) = decode_unsigned_leb128(&src_bin[(item_ofs + n_param_b + (n_param as usize) + 1)..]);
+            let (n_param, n_param_b) = decode_uleb128(&src_bin[(item_ofs + 1)..]);
+            let (n_result, n_result_b) = decode_uleb128(&src_bin[(item_ofs + n_param_b + (n_param as usize) + 1)..]);
     
             let param_ofs = item_ofs + n_param_b + 1;
             let param_types = parse_type(param_ofs..(param_ofs + (n_param as usize)))?;
@@ -107,23 +107,23 @@ pub(crate) fn parse(src_bin: &[u8]) -> Result<ModuleInstance, Error> {
       },
       // import section
       2 => {
-        let (section_size, section_size_b) = decode_unsigned_leb128(&src_bin[(section_ofs + 1)..]);
-        let (n_item, n_item_b) = decode_unsigned_leb128(&src_bin[(section_ofs + section_size_b + 1)..]);
+        let (section_size, section_size_b) = decode_uleb128(&src_bin[(section_ofs + 1)..]);
+        let (n_item, n_item_b) = decode_uleb128(&src_bin[(section_ofs + section_size_b + 1)..]);
 
         let mut item_ofs = section_ofs + section_size_b + n_item_b + 1;
         tmp_imports = (0..n_item)
           .map(|_| {
-            let (module_name_len, module_name_len_b) = decode_unsigned_leb128(&src_bin[item_ofs..]);
+            let (module_name_len, module_name_len_b) = decode_uleb128(&src_bin[item_ofs..]);
             let module_name = parse_utf8(item_ofs + module_name_len_b, module_name_len as usize)?;
   
-            let (field_name_len, field_name_len_b) = decode_unsigned_leb128(&src_bin[(item_ofs + module_name_len_b + (module_name_len as usize))..]);
+            let (field_name_len, field_name_len_b) = decode_uleb128(&src_bin[(item_ofs + module_name_len_b + (module_name_len as usize))..]);
             let field_name_ofs = item_ofs + module_name_len_b + (module_name_len as usize) + field_name_len_b;
             let field_name = parse_utf8(field_name_ofs, field_name_len as usize)?;
   
             let kind_ofs = field_name_ofs + (field_name_len as usize);
             let (kind, kind_b) = match src_bin[kind_ofs] {
                 0 => {
-                  let (type_idx, type_idx_b) = decode_unsigned_leb128(&src_bin[(kind_ofs + 1)..]);
+                  let (type_idx, type_idx_b) = decode_uleb128(&src_bin[(kind_ofs + 1)..]);
   
                   (ImportKind::TypeIdx(type_idx as u32), type_idx_b)
                 },
@@ -147,13 +147,13 @@ pub(crate) fn parse(src_bin: &[u8]) -> Result<ModuleInstance, Error> {
       },
       // function section
       3 => {
-        let (section_size, section_size_b) = decode_unsigned_leb128(&src_bin[(section_ofs + 1)..]);
-        let (n_item, n_item_b) = decode_unsigned_leb128(&src_bin[(section_ofs + section_size_b + 1)..]);
+        let (section_size, section_size_b) = decode_uleb128(&src_bin[(section_ofs + 1)..]);
+        let (n_item, n_item_b) = decode_uleb128(&src_bin[(section_ofs + section_size_b + 1)..]);
 
         let mut item_ofs = section_ofs + section_size_b + n_item_b + 1;
         tmp_function_types = (0..n_item)
           .map(|_| {
-            let (type_pos, type_pos_b) = decode_unsigned_leb128(&src_bin[item_ofs..]);
+            let (type_pos, type_pos_b) = decode_uleb128(&src_bin[item_ofs..]);
 
             item_ofs += type_pos_b;
 
@@ -169,20 +169,20 @@ pub(crate) fn parse(src_bin: &[u8]) -> Result<ModuleInstance, Error> {
       },
       // memory section
       5 => {
-        let (section_size, section_size_b) = decode_unsigned_leb128(&src_bin[(section_ofs + 1)..]);
-        let (n_item, n_item_b) = decode_unsigned_leb128(&src_bin[(section_ofs + section_size_b + 1)..]);
+        let (section_size, section_size_b) = decode_uleb128(&src_bin[(section_ofs + 1)..]);
+        let (n_item, n_item_b) = decode_uleb128(&src_bin[(section_ofs + section_size_b + 1)..]);
 
         let mut item_ofs = section_ofs + section_size_b + n_item_b + 1;
         tmp_memories = (0..n_item)
           .map(|_| {
             let limit_flag = src_bin[item_ofs];
-            let (limit_initial, limit_initial_b) = decode_unsigned_leb128(&src_bin[(item_ofs + 1)..]);
+            let (limit_initial, limit_initial_b) = decode_uleb128(&src_bin[(item_ofs + 1)..]);
   
             let (max_b, max) = match limit_flag {
               0 => (0, None),
               1 => {
                 let max_ofs = item_ofs + limit_initial_b + 1;
-                let (limit_max, limit_max_b) = decode_unsigned_leb128(&src_bin[max_ofs..]);
+                let (limit_max, limit_max_b) = decode_uleb128(&src_bin[max_ofs..]);
     
                 (limit_max_b, Some(limit_max))
               },
@@ -204,8 +204,8 @@ pub(crate) fn parse(src_bin: &[u8]) -> Result<ModuleInstance, Error> {
       },
       // global section
       6 => {
-        let (section_size, section_size_b) = decode_unsigned_leb128(&src_bin[(section_ofs + 1)..]);
-        let (n_item, n_item_b) = decode_unsigned_leb128(&src_bin[(section_ofs + section_size_b + 1)..]);
+        let (section_size, section_size_b) = decode_uleb128(&src_bin[(section_ofs + 1)..]);
+        let (n_item, n_item_b) = decode_uleb128(&src_bin[(section_ofs + section_size_b + 1)..]);
 
         let mut item_ofs = section_ofs + section_size_b + n_item_b + 1;
         tmp_globals = (0..n_item)
@@ -225,20 +225,20 @@ pub(crate) fn parse(src_bin: &[u8]) -> Result<ModuleInstance, Error> {
       },
       // export section
       7 => {
-        let (section_size, section_size_b) = decode_unsigned_leb128(&src_bin[(section_ofs + 1)..]);
-        let (n_item, n_item_b) = decode_unsigned_leb128(&src_bin[(section_ofs + section_size_b + 1)..]);
+        let (section_size, section_size_b) = decode_uleb128(&src_bin[(section_ofs + 1)..]);
+        let (n_item, n_item_b) = decode_uleb128(&src_bin[(section_ofs + section_size_b + 1)..]);
 
         let mut item_ofs = section_ofs + section_size_b + n_item_b + 1;
         tmp_exports = (0..n_item)
           .map(|_| {
-            let (export_name_len, export_name_len_b) = decode_unsigned_leb128(&src_bin[item_ofs..]);
+            let (export_name_len, export_name_len_b) = decode_uleb128(&src_bin[item_ofs..]);
             let export_name = parse_utf8(item_ofs + export_name_len_b, export_name_len as usize)?;
             
             let export_idx_ofs = item_ofs + export_name_len_b + (export_name_len as usize) + 1;
             let export_desc = ExportDesc::try_from(src_bin[export_idx_ofs - 1])
               .map_err(Error::InvalidValue)?;
 
-            let (export_idx, export_idx_b) = decode_unsigned_leb128(&src_bin[export_idx_ofs..]);
+            let (export_idx, export_idx_b) = decode_uleb128(&src_bin[export_idx_ofs..]);
 
             item_ofs = export_idx_ofs + export_idx_b;
 
@@ -254,8 +254,8 @@ pub(crate) fn parse(src_bin: &[u8]) -> Result<ModuleInstance, Error> {
       },
       // start section
       8 => {
-        let (section_size, section_size_b) = decode_unsigned_leb128(&src_bin[(section_ofs + 1)..]);
-        let (start_func_idx, start_func_idx_b) = decode_unsigned_leb128(&src_bin[(section_ofs + section_size_b + 1)..]);
+        let (section_size, section_size_b) = decode_uleb128(&src_bin[(section_ofs + 1)..]);
+        let (start_func_idx, start_func_idx_b) = decode_uleb128(&src_bin[(section_ofs + section_size_b + 1)..]);
 
         tmp_start_func = Some(start_func_idx as u32);
 
@@ -267,14 +267,14 @@ pub(crate) fn parse(src_bin: &[u8]) -> Result<ModuleInstance, Error> {
       },
       // code section
       10 => {
-        let (section_size, section_size_b) = decode_unsigned_leb128(&src_bin[(section_ofs + 1)..]);
-        let (n_item, n_item_b) = decode_unsigned_leb128(&src_bin[(section_ofs + section_size_b + 1)..]);
+        let (section_size, section_size_b) = decode_uleb128(&src_bin[(section_ofs + 1)..]);
+        let (n_item, n_item_b) = decode_uleb128(&src_bin[(section_ofs + section_size_b + 1)..]);
 
         let mut item_ofs = section_ofs + section_size_b + n_item_b + 1;
         tmp_functions = (0..n_item)
           .map(|i| {
             let func_type_idx = tmp_function_types[i as usize];
-            let (body_size, body_size_b) = decode_unsigned_leb128(&src_bin[item_ofs..]);
+            let (body_size, body_size_b) = decode_uleb128(&src_bin[item_ofs..]);
   
             let (parsed_body, body_size_b) = if body_size > 0 {
               (None, body_size_b)
