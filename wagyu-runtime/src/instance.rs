@@ -1,6 +1,21 @@
 use alloc::vec::Vec;
 
-use crate::{module::{export::Export, function::Function, global::Global, import::Import, memory::Memory32, table::Table, types::Type, value::FuncIdx}, parse::{parse, Error}};
+use crate::{
+  module::{
+    export::Export,
+    function::Function,
+    global::Global,
+    import::Import,
+    memory::Memory32,
+    table::Table,
+    types::Type,
+    value::FuncIdx,
+  },
+  parse::{
+    parse,
+    Error,
+  },
+};
 
 pub struct ModuleInstance {
   pub(crate) types: Vec<Type>,
@@ -18,7 +33,5 @@ impl ModuleInstance {
     parse(src_bin)
   }
 
-  pub fn run_start(&mut self) {
-
-  }
+  pub fn run_start(&mut self) {}
 }

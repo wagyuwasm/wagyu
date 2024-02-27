@@ -1,4 +1,9 @@
-use alloc::alloc::{alloc, realloc, handle_alloc_error, Layout};
+use alloc::alloc::{
+  alloc,
+  handle_alloc_error,
+  realloc,
+  Layout,
+};
 use core::ptr;
 
 const PAGE_SIZE: usize = 65_536;
@@ -12,7 +17,7 @@ pub(crate) struct Memory32 {
   /// Minimum allocating size.
   pub(crate) min: u32,
   /// Maximum allocating size.
-  pub(crate) max: Option<u32>
+  pub(crate) max: Option<u32>,
 }
 
 impl Memory32 {

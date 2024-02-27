@@ -91,21 +91,21 @@ pub(crate) fn decode_uleb128(bytes: &[u8]) -> (u64, usize) {
 pub(crate) fn encode_sleb128<T: Into<i64>>(value: T) -> Vec<u8> {
   let mut bytes = Vec::new();
   let mut value: i64 = value.into();
-    
+
   loop {
     let mut byte = (value as u8) & 0x7F;
     value >>= 7;
-    
+
     let more = !((((value == 0) && ((byte & 0x40) == 0)) || ((value == -1) && ((byte & 0x40) != 0))) as bool) as u8;
-    
+
     byte |= more << 7;
     bytes.push(byte);
-    
+
     if more == 0 {
       break;
     }
   }
-  
+
   bytes
 }
 
@@ -157,11 +157,7 @@ mod tests {
 
   #[test]
   fn test_encode_unsigned_leb128() {
-    let test_cases = vec![
-      (0u64, vec![0]),
-      (127u64, vec![0x7f]),
-      (128u64, vec![0x80, 0x01]),
-    ];
+    let test_cases = vec![(0u64, vec![0]), (127u64, vec![0x7f]), (128u64, vec![0x80, 0x01])];
 
     for (input, expected_output) in test_cases {
       let encoded = encode_uleb128(input);
@@ -171,19 +167,19 @@ mod tests {
 
   #[test]
   fn test_decode_unsigned_leb128() {
-		let test_cases = vec![
-			(vec![0], (0u64, 1usize)),
-			(vec![0x7f], (127u64, 1usize)),
-			(vec![0x80, 0x01], (128u64, 2usize)),
-			(vec![0x80, 0x01, 0x03], (128u64, 2usize)),
-			(vec![0x80, 0x01, 0x80, 0x01], (128u64, 2usize)),
-		];
+    let test_cases = vec![
+      (vec![0], (0u64, 1usize)),
+      (vec![0x7f], (127u64, 1usize)),
+      (vec![0x80, 0x01], (128u64, 2usize)),
+      (vec![0x80, 0x01, 0x03], (128u64, 2usize)),
+      (vec![0x80, 0x01, 0x80, 0x01], (128u64, 2usize)),
+    ];
 
-		for (input, (expected_value, expected_count)) in test_cases {
-			let (decoded_value, decoded_count) = decode_uleb128(&input);
-			assert_eq!(decoded_value, expected_value);
-			assert_eq!(decoded_count, expected_count);
-		}
+    for (input, (expected_value, expected_count)) in test_cases {
+      let (decoded_value, decoded_count) = decode_uleb128(&input);
+      assert_eq!(decoded_value, expected_value);
+      assert_eq!(decoded_count, expected_count);
+    }
   }
 
   #[test]
@@ -206,21 +202,21 @@ mod tests {
 
   #[test]
   fn test_decode_signed_leb128() {
-		let test_cases = vec![
-			(vec![0], (0i64, 1usize)),
-			(vec![0x01], (1i64, 1usize)),
-			(vec![0x3f], (63i64, 1usize)),
-			(vec![0xc0, 0x00], (64i64, 2usize)),
-			(vec![0xc0, 0x00, 0x7c], (64i64, 2usize)),
-			(vec![0x7f], (-1i64, 1usize)),
-			(vec![0xbf, 0x7f], (-65i64, 2usize)),
-			(vec![0x9B, 0xF1, 0x59], (-624485i64, 3usize)),
-		];
+    let test_cases = vec![
+      (vec![0], (0i64, 1usize)),
+      (vec![0x01], (1i64, 1usize)),
+      (vec![0x3f], (63i64, 1usize)),
+      (vec![0xc0, 0x00], (64i64, 2usize)),
+      (vec![0xc0, 0x00, 0x7c], (64i64, 2usize)),
+      (vec![0x7f], (-1i64, 1usize)),
+      (vec![0xbf, 0x7f], (-65i64, 2usize)),
+      (vec![0x9B, 0xF1, 0x59], (-624485i64, 3usize)),
+    ];
 
-		for (input, (expected_value, expected_count)) in test_cases {
-			let (decoded_value, decoded_count) = decode_sleb128(&input);
-			assert_eq!(decoded_value, expected_value);
-			assert_eq!(decoded_count, expected_count);
-		}
+    for (input, (expected_value, expected_count)) in test_cases {
+      let (decoded_value, decoded_count) = decode_sleb128(&input);
+      assert_eq!(decoded_value, expected_value);
+      assert_eq!(decoded_count, expected_count);
+    }
   }
 }

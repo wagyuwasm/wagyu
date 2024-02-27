@@ -5,17 +5,13 @@ use crate::module::value::Value;
 pub struct Stack {
   operand: OperandStack,
   control: ControlStack,
-  call: CallStack
+  call: CallStack,
 }
 
 pub struct OperandStack {
-  items: Vec<Value>
+  items: Vec<Value>,
 }
 
-pub struct ControlStack {
+pub struct ControlStack {}
 
-}
-
-pub struct CallStack {
-
-}
+pub struct CallStack {}

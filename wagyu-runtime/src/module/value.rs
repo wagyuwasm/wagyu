@@ -17,7 +17,7 @@ pub(crate) enum ValType {
   F64,
   V128,
   FuncRef,
-  ExternRef
+  ExternRef,
 }
 
 #[derive(Debug, Clone)]
@@ -28,7 +28,7 @@ pub(crate) enum Value {
   F64(f64),
   V128(u128),
   FuncRef(u32),
-  ExternRef(u32)
+  ExternRef(u32),
 }
 
 impl TryFrom<u8> for ValType {
@@ -43,14 +43,14 @@ impl TryFrom<u8> for ValType {
       0x7B => Ok(Self::V128),
       0x70 => Ok(Self::FuncRef),
       0x6F => Ok(Self::ExternRef),
-      _ => Err(format!("invalid valtype"))
+      _ => Err(format!("invalid valtype")),
     }
   }
 }
 
 pub(crate) enum RefType {
   FuncRef,
-  ExternRef
+  ExternRef,
 }
 
 pub(crate) struct Limit(u32, Option<u32>);
@@ -66,14 +66,14 @@ pub(crate) enum V128ConstValue {
 
 pub(crate) enum HeapType {
   Func,
-  Extern
+  Extern,
 }
 
 pub(crate) enum ExportDesc {
   FuncIdx,
   TableIdx,
   MemIdx,
-  GlobalIdx
+  GlobalIdx,
 }
 
 impl TryFrom<u8> for ExportDesc {
@@ -85,7 +85,7 @@ impl TryFrom<u8> for ExportDesc {
       0x01 => Ok(Self::TableIdx),
       0x02 => Ok(Self::MemIdx),
       0x03 => Ok(Self::GlobalIdx),
-      _ => Err(format!("invalid export kind"))
+      _ => Err(format!("invalid export kind")),
     }
   }
 }
@@ -102,7 +102,7 @@ impl TryFrom<u8> for GlobalMut {
     match value {
       0x00 => Ok(Self::Const),
       0x01 => Ok(Self::Var),
-      _ => Err(format!("invalid global mut"))
+      _ => Err(format!("invalid global mut")),
     }
   }
 }

@@ -1,9 +1,35 @@
-use alloc::string::String;
-use alloc::vec::Vec;
-use core::ptr;
-use core::ops::Range;
+use alloc::{
+  string::String,
+  vec::Vec,
+};
+use core::{
+  ops::Range,
+  ptr,
+};
 
-use crate::{helper::leb128::decode_uleb128, instance::ModuleInstance, module::{export::Export, function::{Function, ParsedBody}, global::Global, import::{Import, ImportKind}, memory::Memory32, types::Type, value::{ExportDesc, GlobalMut, ValType}}};
+use crate::{
+  helper::leb128::decode_uleb128,
+  instance::ModuleInstance,
+  module::{
+    export::Export,
+    function::{
+      Function,
+      ParsedBody,
+    },
+    global::Global,
+    import::{
+      Import,
+      ImportKind,
+    },
+    memory::Memory32,
+    types::Type,
+    value::{
+      ExportDesc,
+      GlobalMut,
+      ValType,
+    },
+  },
+};
 
 pub enum Error {
   InvalidBinaryMagic,
@@ -37,21 +63,18 @@ pub(crate) fn parse(src_bin: &[u8]) -> Result<ModuleInstance, Error> {
   let mut tmp_start_func = None;
 
   // Calculates the fixup size of a section if body size is not provided.
-  let finalize_section = |section_ofs: usize, section_size: u64, fixup_ofs: usize| {
-    match section_size {
-      0 => {
-        let (_, fixup_size_b) = decode_uleb128(&src_bin[fixup_ofs..]);
+  let finalize_section = |section_ofs: usize, section_size: u64, fixup_ofs: usize| match section_size {
+    0 => {
+      let (_, fixup_size_b) = decode_uleb128(&src_bin[fixup_ofs..]);
 
-        fixup_ofs + fixup_size_b
-      },
-      _ => section_ofs + (section_size as usize) + 1
+      fixup_ofs + fixup_size_b
     }
+    _ => section_ofs + (section_size as usize) + 1,
   };
 
   // Parses string in a given offset and len to the reading source binary.
   let parse_utf8 = |ofs: usize, len: usize| {
-    String::from_utf8(Vec::from(&src_bin[ofs..(ofs + len)]))
-      .map_err(|err| Error::InvalidValue(format!("{}", err)))
+    String::from_utf8(Vec::from(&src_bin[ofs..(ofs + len)])).map_err(|err| Error::InvalidValue(format!("{}", err)))
   };
 
   loop {
@@ -64,7 +87,7 @@ pub(crate) fn parse(src_bin: &[u8]) -> Result<ModuleInstance, Error> {
       0 => {
         // assumption: the custom section is the last section to be parsed, so we can skip this section.
         break;
-      },
+      }
       // type section
       1 => {
         let (section_size, section_size_b) = decode_uleb128(&src_bin[(section_ofs + 1)..]);
@@ -86,10 +109,10 @@ pub(crate) fn parse(src_bin: &[u8]) -> Result<ModuleInstance, Error> {
 
             let (n_param, n_param_b) = decode_uleb128(&src_bin[(item_ofs + 1)..]);
             let (n_result, n_result_b) = decode_uleb128(&src_bin[(item_ofs + n_param_b + (n_param as usize) + 1)..]);
-    
+
             let param_ofs = item_ofs + n_param_b + 1;
             let param_types = parse_type(param_ofs..(param_ofs + (n_param as usize)))?;
-  
+
             let result_ofs = item_ofs + n_param_b + (n_param as usize) + n_result_b + 1;
             let next_func_ofs = result_ofs + (n_result as usize);
             let result_types = parse_type(result_ofs..next_func_ofs)?;
@@ -98,13 +121,13 @@ pub(crate) fn parse(src_bin: &[u8]) -> Result<ModuleInstance, Error> {
 
             Ok(Type {
               params: param_types,
-              results: result_types
+              results: result_types,
             })
           })
           .collect::<Result<_, _>>()?;
 
         finalize_section(section_ofs, section_size, item_ofs)
-      },
+      }
       // import section
       2 => {
         let (section_size, section_size_b) = decode_uleb128(&src_bin[(section_ofs + 1)..]);
@@ -115,22 +138,23 @@ pub(crate) fn parse(src_bin: &[u8]) -> Result<ModuleInstance, Error> {
           .map(|_| {
             let (module_name_len, module_name_len_b) = decode_uleb128(&src_bin[item_ofs..]);
             let module_name = parse_utf8(item_ofs + module_name_len_b, module_name_len as usize)?;
-  
-            let (field_name_len, field_name_len_b) = decode_uleb128(&src_bin[(item_ofs + module_name_len_b + (module_name_len as usize))..]);
+
+            let (field_name_len, field_name_len_b) =
+              decode_uleb128(&src_bin[(item_ofs + module_name_len_b + (module_name_len as usize))..]);
             let field_name_ofs = item_ofs + module_name_len_b + (module_name_len as usize) + field_name_len_b;
             let field_name = parse_utf8(field_name_ofs, field_name_len as usize)?;
-  
+
             let kind_ofs = field_name_ofs + (field_name_len as usize);
             let (kind, kind_b) = match src_bin[kind_ofs] {
-                0 => {
-                  let (type_idx, type_idx_b) = decode_uleb128(&src_bin[(kind_ofs + 1)..]);
-  
-                  (ImportKind::TypeIdx(type_idx as u32), type_idx_b)
-                },
-                1 => todo!(),
-                2 => todo!(),
-                3 => todo!(),
-                _ => return Err(Error::InvalidValue(format!("invalid import kind")))
+              0 => {
+                let (type_idx, type_idx_b) = decode_uleb128(&src_bin[(kind_ofs + 1)..]);
+
+                (ImportKind::TypeIdx(type_idx as u32), type_idx_b)
+              }
+              1 => todo!(),
+              2 => todo!(),
+              3 => todo!(),
+              _ => return Err(Error::InvalidValue(format!("invalid import kind"))),
             };
 
             item_ofs = kind_ofs + kind_b + 1;
@@ -138,13 +162,13 @@ pub(crate) fn parse(src_bin: &[u8]) -> Result<ModuleInstance, Error> {
             Ok(Import {
               module_name,
               field_name,
-              kind
+              kind,
             })
           })
           .collect::<Result<_, _>>()?;
 
         finalize_section(section_ofs, section_size, item_ofs)
-      },
+      }
       // function section
       3 => {
         let (section_size, section_size_b) = decode_uleb128(&src_bin[(section_ofs + 1)..]);
@@ -162,11 +186,11 @@ pub(crate) fn parse(src_bin: &[u8]) -> Result<ModuleInstance, Error> {
           .collect::<Result<_, _>>()?;
 
         finalize_section(section_ofs, section_size, item_ofs)
-      },
+      }
       // table section
       4 => {
         todo!()
-      },
+      }
       // memory section
       5 => {
         let (section_size, section_size_b) = decode_uleb128(&src_bin[(section_ofs + 1)..]);
@@ -177,16 +201,16 @@ pub(crate) fn parse(src_bin: &[u8]) -> Result<ModuleInstance, Error> {
           .map(|_| {
             let limit_flag = src_bin[item_ofs];
             let (limit_initial, limit_initial_b) = decode_uleb128(&src_bin[(item_ofs + 1)..]);
-  
+
             let (max_b, max) = match limit_flag {
               0 => (0, None),
               1 => {
                 let max_ofs = item_ofs + limit_initial_b + 1;
                 let (limit_max, limit_max_b) = decode_uleb128(&src_bin[max_ofs..]);
-    
+
                 (limit_max_b, Some(limit_max))
-              },
-              _ => return Err(Error::InvalidValue(format!("limit flag byte is invalid")))
+              }
+              _ => return Err(Error::InvalidValue(format!("limit flag byte is invalid"))),
             };
 
             item_ofs += limit_initial_b + max_b + 1;
@@ -195,13 +219,13 @@ pub(crate) fn parse(src_bin: &[u8]) -> Result<ModuleInstance, Error> {
               ptr: ptr::null_mut(),
               size: 0,
               min: limit_initial as u32,
-              max: max.map(|x| x as u32)
+              max: max.map(|x| x as u32),
             })
           })
           .collect::<Result<_, _>>()?;
 
         finalize_section(section_ofs, section_size, item_ofs)
-      },
+      }
       // global section
       6 => {
         let (section_size, section_size_b) = decode_uleb128(&src_bin[(section_ofs + 1)..]);
@@ -216,13 +240,13 @@ pub(crate) fn parse(src_bin: &[u8]) -> Result<ModuleInstance, Error> {
             Ok(Global {
               kind: global_mut,
               valtype: global_valtype,
-              value: todo!()
+              value: todo!(),
             })
           })
           .collect::<Result<_, _>>()?;
 
         finalize_section(section_ofs, section_size, item_ofs)
-      },
+      }
       // export section
       7 => {
         let (section_size, section_size_b) = decode_uleb128(&src_bin[(section_ofs + 1)..]);
@@ -233,10 +257,9 @@ pub(crate) fn parse(src_bin: &[u8]) -> Result<ModuleInstance, Error> {
           .map(|_| {
             let (export_name_len, export_name_len_b) = decode_uleb128(&src_bin[item_ofs..]);
             let export_name = parse_utf8(item_ofs + export_name_len_b, export_name_len as usize)?;
-            
+
             let export_idx_ofs = item_ofs + export_name_len_b + (export_name_len as usize) + 1;
-            let export_desc = ExportDesc::try_from(src_bin[export_idx_ofs - 1])
-              .map_err(Error::InvalidValue)?;
+            let export_desc = ExportDesc::try_from(src_bin[export_idx_ofs - 1]).map_err(Error::InvalidValue)?;
 
             let (export_idx, export_idx_b) = decode_uleb128(&src_bin[export_idx_ofs..]);
 
@@ -245,13 +268,13 @@ pub(crate) fn parse(src_bin: &[u8]) -> Result<ModuleInstance, Error> {
             Ok(Export {
               name: export_name,
               desc: export_desc,
-              idx: export_idx as u32
+              idx: export_idx as u32,
             })
           })
           .collect::<Result<_, _>>()?;
 
         finalize_section(section_ofs, section_size, item_ofs)
-      },
+      }
       // start section
       8 => {
         let (section_size, section_size_b) = decode_uleb128(&src_bin[(section_ofs + 1)..]);
@@ -259,12 +282,16 @@ pub(crate) fn parse(src_bin: &[u8]) -> Result<ModuleInstance, Error> {
 
         tmp_start_func = Some(start_func_idx as u32);
 
-        finalize_section(section_ofs, section_size, section_ofs + section_size_b + start_func_idx_b + 1)
-      },
+        finalize_section(
+          section_ofs,
+          section_size,
+          section_ofs + section_size_b + start_func_idx_b + 1,
+        )
+      }
       // element section
       9 => {
         todo!()
-      },
+      }
       // code section
       10 => {
         let (section_size, section_size_b) = decode_uleb128(&src_bin[(section_ofs + 1)..]);
@@ -275,12 +302,12 @@ pub(crate) fn parse(src_bin: &[u8]) -> Result<ModuleInstance, Error> {
           .map(|i| {
             let func_type_idx = tmp_function_types[i as usize];
             let (body_size, body_size_b) = decode_uleb128(&src_bin[item_ofs..]);
-  
+
             let (parsed_body, body_size_b) = if body_size > 0 {
               (None, body_size_b)
             } else {
               let (parsed_body, parsed_body_b) = parse_func_body(src_bin, item_ofs)?;
-  
+
               (Some(parsed_body), parsed_body_b)
             };
 
@@ -288,22 +315,27 @@ pub(crate) fn parse(src_bin: &[u8]) -> Result<ModuleInstance, Error> {
 
             Ok(Function {
               signature_idx: func_type_idx as u32,
-              parsed_body
+              parsed_body,
             })
           })
           .collect::<Result<_, _>>()?;
 
         finalize_section(section_ofs, section_size, item_ofs)
-      },
+      }
       // data section
       11 => {
         todo!()
-      },
+      }
       // data count section
       12 => {
         todo!()
-      },
-      _ => return Err(Error::InvalidSectionFormat(format!("invalid section id {}", src_bin[section_ofs])))
+      }
+      _ => {
+        return Err(Error::InvalidSectionFormat(format!(
+          "invalid section id {}",
+          src_bin[section_ofs]
+        )))
+      }
     }
   }
 

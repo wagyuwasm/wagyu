@@ -5,7 +5,7 @@ pub enum Error {
   OutOfBoundMemoryAccess,
   InvalidInstruction,
   MemoryExaustion,
-  StackOverflow
+  StackOverflow,
 }
 
 fn execute(func_body: &[u8], stack: &mut Stack) -> Result<(), Error> {

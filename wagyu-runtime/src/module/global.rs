@@ -1,16 +1,20 @@
-use super::value::{GlobalMut, ValType, Value};
+use super::value::{
+  GlobalMut,
+  ValType,
+  Value,
+};
 
 pub(crate) struct Global {
   pub(crate) kind: GlobalMut,
   pub(crate) valtype: ValType,
-  pub(crate) value: Option<Value>
+  pub(crate) value: Option<Value>,
 }
 
 impl Global {
   pub(crate) fn get(&self) -> Value {
     match self.value.as_ref() {
       Some(v) => v.clone(),
-      None => panic!("cannot get uninitialized global")
+      None => panic!("cannot get uninitialized global"),
     }
   }
 
@@ -27,7 +31,7 @@ impl Global {
       (ValType::V128, Value::V128(v)) => Some(Value::V128(v)),
       (ValType::FuncRef, Value::FuncRef(v)) => Some(Value::FuncRef(v)),
       (ValType::ExternRef, Value::ExternRef(v)) => Some(Value::ExternRef(v)),
-      _ => panic!("incompatible type")
+      _ => panic!("incompatible type"),
     };
   }
 }

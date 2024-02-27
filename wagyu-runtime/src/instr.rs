@@ -322,7 +322,7 @@ pub(crate) enum Instr {
   I64X2GtS,
   I64X2LeS,
   I64X2GeS,
-  
+
   F32X4Eq,
   F32X4Ne,
   F32X4Lt,

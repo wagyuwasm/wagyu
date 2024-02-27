@@ -1,11 +1,16 @@
 use alloc::string::String;
 
-use super::value::{GlobalMut, Limit, RefType, ValType};
+use super::value::{
+  GlobalMut,
+  Limit,
+  RefType,
+  ValType,
+};
 
 pub(crate) struct Import {
   pub(crate) module_name: String,
   pub(crate) field_name: String,
-  pub(crate) kind: ImportKind
+  pub(crate) kind: ImportKind,
 }
 
 pub(crate) enum ImportKind {
