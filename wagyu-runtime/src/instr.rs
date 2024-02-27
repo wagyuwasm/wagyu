@@ -1,4 +1,10 @@
-use crate::module::value::{HeapType, V128ConstValue};
+use alloc::vec::Vec;
+
+use crate::module::value::*;
+
+type LaneIdx = u8;
+type Offset = u32;
+type Align = u32;
 
 pub(crate) enum Instr {
   // control instructions
@@ -10,69 +16,69 @@ pub(crate) enum Instr {
 
   Unreachable,
   Nop,
-  Br(u32), // (labelidx)
-  BrIf(u32), // (labelidx)
-  BrTable(Vec<u32>, u32), // (vec<lableidx>, lableidx)
+  Br(LabelIdx),
+  BrIf(LabelIdx),
+  BrTable(Vec<LabelIdx>, LabelIdx),
   Return,
-  Call(u32), // (funcidx)
-  CallIndirect(u32, u32), // (tableidx, typeidx)
+  Call(FuncIdx),
+  CallIndirect(TableIdx, TypeIdx),
 
   // reference instruction
   RefNull(HeapType),
   RefIsNull,
-  RefFunc(u32), // (funcidx)
+  RefFunc(FuncIdx),
 
   // parametric instructions
   Drop,
   Select,
 
-  // variable instructions (localidx|globalidx)
-  LocalGet(u32),
-  LocalSet(u32),
-  LocalTee(u32),
-  GlobalGet(u32),
-  GlobalSet(u32),
+  // variable instructions
+  LocalGet(LocalIdx),
+  LocalSet(LocalIdx),
+  LocalTee(LocalIdx),
+  GlobalGet(GlobalIdx),
+  GlobalSet(GlobalIdx),
 
-  // table instructions (tableidx)
-  TableGet(u32),
-  TableSet(u32),
-  TableSize(u32),
-  TableGrow(u32),
-  TableFill(u32),
-  TableCopy(u32),
-  TableInit(u32),
-  ElemDrop(u32),
+  // table instructions
+  TableGet(TableIdx),
+  TableSet(TableIdx),
+  TableSize(TableIdx),
+  TableGrow(TableIdx),
+  TableFill(TableIdx),
+  TableCopy(TableIdx),
+  TableInit(TableIdx),
+  ElemDrop(TableIdx),
 
-  // memory instructions (memidx, offset, align) | (memidx) | (memidx, dataidx)
-  I32Load(u32, u32, u32),
-  I64Load(u32, u32, u32),
-  F32Load(u32, u32, u32),
-  F64Load(u32, u32, u32),
-  I32Load8S(u32, u32, u32),
-  I32Load8U(u32, u32, u32),
-  I32Load16S(u32, u32, u32),
-  I32Load16U(u32, u32, u32),
-  I64Load8S(u32, u32, u32),
-  I64Load8U(u32, u32, u32),
-  I64Load16S(u32, u32, u32),
-  I64Load16U(u32, u32, u32),
-  I64Load32S(u32, u32, u32),
-  I64Load32U(u32, u32, u32),
-  I32Store(u32, u32, u32),
-  I64Store(u32, u32, u32),
-  F32Store(u32, u32, u32),
-  F64Store(u32, u32, u32),
-  I32Store8(u32, u32, u32),
-  I32Store16(u32, u32, u32),
-  I64Store8(u32, u32, u32),
-  I64Store16(u32, u32, u32),
-  I64Store32(u32, u32, u32),
-  MemorySize(u32),
-  MemoryGrow(u32),
-  MemoryFill(u32),
-  MemoryCopy(u32),
-  MemoryInit(u32, u32),
-  DataDrop(u32, u32),
+  // memory instructions
+  I32Load(MemIdx, Offset, Align),
+  I64Load(MemIdx, Offset, Align),
+  F32Load(MemIdx, Offset, Align),
+  F64Load(MemIdx, Offset, Align),
+  I32Load8S(MemIdx, Offset, Align),
+  I32Load8U(MemIdx, Offset, Align),
+  I32Load16S(MemIdx, Offset, Align),
+  I32Load16U(MemIdx, Offset, Align),
+  I64Load8S(MemIdx, Offset, Align),
+  I64Load8U(MemIdx, Offset, Align),
+  I64Load16S(MemIdx, Offset, Align),
+  I64Load16U(MemIdx, Offset, Align),
+  I64Load32S(MemIdx, Offset, Align),
+  I64Load32U(MemIdx, Offset, Align),
+  I32Store(MemIdx, Offset, Align),
+  I64Store(MemIdx, Offset, Align),
+  F32Store(MemIdx, Offset, Align),
+  F64Store(MemIdx, Offset, Align),
+  I32Store8(MemIdx, Offset, Align),
+  I32Store16(MemIdx, Offset, Align),
+  I64Store8(MemIdx, Offset, Align),
+  I64Store16(MemIdx, Offset, Align),
+  I64Store32(MemIdx, Offset, Align),
+  MemorySize(MemIdx),
+  MemoryGrow(MemIdx),
+  MemoryFill(MemIdx),
+  MemoryCopy(MemIdx),
+  MemoryInit(MemIdx, DataIdx),
+  DataDrop(MemIdx, DataIdx),
 
   // numeric instruction
   I32Const(i32),
@@ -226,29 +232,29 @@ pub(crate) enum Instr {
   I64Extend16S,
   I64Extend32S,
 
-  // vector instruction (memidx, offset, align) | (memidx, offset, align, laneidx)
-  V128Load(u32, u32, u32),
-  V128Load8X8S(u32, u32, u32),
-  V128Load8X8U(u32, u32, u32),
-  V128Load16X4S(u32, u32, u32),
-  V128Load16X4U(u32, u32, u32),
-  V128Load32X2S(u32, u32, u32),
-  V128Load32X2U(u32, u32, u32),
-  V128Load8Splat(u32, u32, u32),
-  V128Load16Splat(u32, u32, u32),
-  V128Load32Splat(u32, u32, u32),
-  V128Load64Splat(u32, u32, u32),
-  V128Load32Zero(u32, u32, u32),
-  V128Load64Zero(u32, u32, u32),
-  V128Store(u32, u32, u32),
-  V128Load8Lane(u32, u32, u32, u8),
-  V128Load16Lane(u32, u32, u32, u8),
-  V128Load32Lane(u32, u32, u32, u8),
-  V128Load64Lane(u32, u32, u32, u8),
-  V128Store8Lane(u32, u32, u32, u8),
-  V128Store16Lane(u32, u32, u32, u8),
-  V128Store32Lane(u32, u32, u32, u8),
-  V128Store64Lane(u32, u32, u32, u8),
+  // vector instruction
+  V128Load(MemIdx, Offset, Align),
+  V128Load8X8S(MemIdx, Offset, Align),
+  V128Load8X8U(MemIdx, Offset, Align),
+  V128Load16X4S(MemIdx, Offset, Align),
+  V128Load16X4U(MemIdx, Offset, Align),
+  V128Load32X2S(MemIdx, Offset, Align),
+  V128Load32X2U(MemIdx, Offset, Align),
+  V128Load8Splat(MemIdx, Offset, Align),
+  V128Load16Splat(MemIdx, Offset, Align),
+  V128Load32Splat(MemIdx, Offset, Align),
+  V128Load64Splat(MemIdx, Offset, Align),
+  V128Load32Zero(MemIdx, Offset, Align),
+  V128Load64Zero(MemIdx, Offset, Align),
+  V128Store(MemIdx, Offset, Align),
+  V128Load8Lane(MemIdx, Offset, Align, LaneIdx),
+  V128Load16Lane(MemIdx, Offset, Align, LaneIdx),
+  V128Load32Lane(MemIdx, Offset, Align, LaneIdx),
+  V128Load64Lane(MemIdx, Offset, Align, LaneIdx),
+  V128Store8Lane(MemIdx, Offset, Align, LaneIdx),
+  V128Store16Lane(MemIdx, Offset, Align, LaneIdx),
+  V128Store32Lane(MemIdx, Offset, Align, LaneIdx),
+  V128Store64Lane(MemIdx, Offset, Align, LaneIdx),
 
   V128Const(V128ConstValue),
 
@@ -262,20 +268,20 @@ pub(crate) enum Instr {
   F32X4Splat,
   F64X2Splat,
 
-  I8X16ExtractLaneS(u8),
-  I8X16ExtractLaneU(u8),
-  I8X16ReplaceLane(u8),
-  I16X8ExtractLaneS(u8),
-  I16X8ExtractLaneU(u8),
-  I16X8ReplaceLane(u8),
-  I32X4ExtractLane(u8),
-  I32X4ReplaceLane(u8),
-  I64X2ExtractLane(u8),
-  I64X2ReplaceLane(u8),
-  F32X4ExtractLane(u8),
-  F32X4ReplaceLane(u8),
-  F64X2ExtractLane(u8),
-  F64X2ReplaceLane(u8),
+  I8X16ExtractLaneS(LaneIdx),
+  I8X16ExtractLaneU(LaneIdx),
+  I8X16ReplaceLane(LaneIdx),
+  I16X8ExtractLaneS(LaneIdx),
+  I16X8ExtractLaneU(LaneIdx),
+  I16X8ReplaceLane(LaneIdx),
+  I32X4ExtractLane(LaneIdx),
+  I32X4ReplaceLane(LaneIdx),
+  I64X2ExtractLane(LaneIdx),
+  I64X2ReplaceLane(LaneIdx),
+  F32X4ExtractLane(LaneIdx),
+  F32X4ReplaceLane(LaneIdx),
+  F64X2ExtractLane(LaneIdx),
+  F64X2ReplaceLane(LaneIdx),
 
   I8X16Eq,
   I8X16Ne,

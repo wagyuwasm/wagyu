@@ -1,5 +1,7 @@
+use super::value::TypeIdx;
+
 pub(crate) struct Function {
-  pub(crate) signature_idx: u32,
+  pub(crate) signature_idx: TypeIdx,
   pub(crate) parsed_body: Option<ParsedBody>
 }
 

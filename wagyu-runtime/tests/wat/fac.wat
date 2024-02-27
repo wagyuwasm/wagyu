@@ -12,4 +12,6 @@
       f64.sub
       call $fac
       f64.mul
-    end))
+    end
+  )
+)

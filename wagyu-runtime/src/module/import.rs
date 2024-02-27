@@ -1,4 +1,6 @@
-use super::value::{GlobalType, Limit, RefType, ValType};
+use alloc::string::String;
+
+use super::value::{GlobalMut, Limit, RefType, ValType};
 
 pub(crate) struct Import {
   pub(crate) module_name: String,
@@ -10,5 +12,5 @@ pub(crate) enum ImportKind {
   TypeIdx(u32),
   TableType(RefType, Limit),
   MemType(Limit),
-  GlobalType(ValType, GlobalType),
+  GlobalType(ValType, GlobalMut),
 }

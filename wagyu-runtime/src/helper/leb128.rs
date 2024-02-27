@@ -1,3 +1,5 @@
+use alloc::vec::Vec;
+
 /// Encodes an unsigned integer into a variable-length little-endian base 128 (LEB128) representation.
 ///
 /// # Arguments

@@ -1,5 +1,5 @@
-use std::alloc::{alloc, realloc, handle_alloc_error, Layout};
-use std::ptr;
+use alloc::alloc::{alloc, realloc, handle_alloc_error, Layout};
+use core::ptr;
 
 const PAGE_SIZE: usize = 65_536;
 const ALIGN: usize = 4;
