@@ -1,6 +1,3 @@
-use core::str;
-
-#[derive(Debug, Clone)]
 pub(crate) enum ValType {
   I32,
   I64,
@@ -46,4 +43,18 @@ pub(crate) struct Limit(u32, Option<u32>);
 pub(crate) enum GlobalType {
   Const,
   Var
+}
+
+pub(crate) enum V128ConstValue {
+  I8X16([i8; 16]),
+  I16X8([i16; 8]),
+  I32X4([i32; 4]),
+  I64X2([i64; 2]),
+  F32X4([f32; 4]),
+  F64X2([f64; 2]),
+}
+
+pub(crate) enum HeapType {
+  Func,
+  Extern
 }
