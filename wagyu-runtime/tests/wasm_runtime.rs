@@ -26,8 +26,10 @@ fn parse_wasm_files() {
     for file_path in valid_file_paths {
         let buffer = fs::read(file_path).expect("failed to read a file");
 
+        println!("compiling: {file_path:?}");
+
         if let Err(e) = compile(&buffer) {
-            err_messages.push(format!("{}) {file_path:?} {e:?}", err_messages.len() + 1));
+            err_messages.push(format!("{}) {file_path:?} {e}", err_messages.len() + 1));
         }
     }
 

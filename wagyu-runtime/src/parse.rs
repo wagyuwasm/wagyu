@@ -22,25 +22,50 @@ use crate::{
   }
 };
 
-#[derive(Debug)]
-pub enum Error {
+pub enum ErrorKind {
   InvalidBinaryMagic,
   InvalidBinaryVersion,
-  InvalidSectionFormat(String),
-  InvalidInstruction(String),
-  InvalidValue(String),
-  MissingSection(String),
+  InvalidSectionFormat,
+  InvalidInstruction,
+  InvalidValue,
+  MissingSection,
+}
+
+pub struct Error {
+  pub message: String,
+  pub kind: ErrorKind,
+  pub offset: usize,
+}
+
+impl From<(usize, ErrorKind)> for Error {
+  fn from(value: (usize, ErrorKind)) -> Self {
+    Self {
+      message: String::new(),
+      kind: value.1,
+      offset: value.0
+    }
+  }
+}
+
+impl From<(usize, ErrorKind, String)> for Error {
+  fn from(value: (usize, ErrorKind, String)) -> Self {
+    Self {
+      message: value.2.to_owned(),
+      kind: value.1,
+      offset: value.0
+    }
+  }
 }
 
 impl fmt::Display for Error {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    match *self {
-      Error::InvalidBinaryMagic => write!(f, "Invalid binary magic"),
-      Error::InvalidBinaryVersion => write!(f, "Invalid binary version"),
-      Error::InvalidSectionFormat(ref s) => write!(f, "Invalid section format: {}", s),
-      Error::InvalidInstruction(ref s) => write!(f, "Invalid instruction: {}", s),
-      Error::InvalidValue(ref s) => write!(f, "Invalid value: {}", s),
-      Error::MissingSection(ref s) => write!(f, "Missing section: {}", s),
+    match self.kind {
+      ErrorKind::InvalidBinaryMagic => write!(f, "Invalid binary magic at 0x{:07X}", self.offset),
+      ErrorKind::InvalidBinaryVersion => write!(f, "Invalid binary version at 0x{:07X}", self.offset),
+      ErrorKind::InvalidSectionFormat => write!(f, "Invalid section format: {} at 0x{:07X}", self.message, self.offset),
+      ErrorKind::InvalidInstruction => write!(f, "Invalid instruction: {} at 0x{:07X}", self.message, self.offset),
+      ErrorKind::InvalidValue => write!(f, "Invalid value: {} at 0x{:07X}", self.message, self.offset),
+      ErrorKind::MissingSection => write!(f, "Missing section: {} at 0x{:07X}", self.message, self.offset),
     }
   }
 }
@@ -50,10 +75,10 @@ pub(crate) fn parse(buf_src: &[u8]) -> Result<Module, Error> {
   let binary_version = &buf_src[4..8];
 
   if binary_magic != &[0x00, 0x61, 0x73, 0x6d] {
-    return Err(Error::InvalidBinaryMagic);
+    return Err(Error::from((0, ErrorKind::InvalidBinaryMagic)));
   }
   if binary_version != &[0x01, 0x00, 0x00, 0x00] {
-    return Err(Error::InvalidBinaryVersion);
+    return Err(Error::from((4, ErrorKind::InvalidBinaryVersion)));
   }
 
   let mut section_ofs = 8;
@@ -69,18 +94,14 @@ pub(crate) fn parse(buf_src: &[u8]) -> Result<Module, Error> {
   let mut tmp_start_func = None;
 
   // Calculates the fixup size of a section if body size is not provided.
-  let finalize_section = |section_ofs: usize, section_size: u64, fixup_ofs: usize| match section_size {
-    0 => {
-      let (_, fixup_size_b) = decode_uleb128(&buf_src[fixup_ofs..]);
-
-      fixup_ofs + fixup_size_b
-    }
-    _ => section_ofs + (section_size as usize) + 1,
+  let finalize_section = |section_ofs: usize, section_size: u64, section_size_b: usize| {
+    section_ofs + (section_size as usize) + section_size_b + 1
   };
 
   // Parses string in a given offset and len to the reading source binary.
   let parse_utf8 = |ofs: usize, len: usize| {
-    String::from_utf8(Vec::from(&buf_src[ofs..(ofs + len)])).map_err(|err| Error::InvalidValue(format!("{}", err)))
+    String::from_utf8(Vec::from(&buf_src[ofs..(ofs + len)]))
+      .map_err(|err| Error::from((ofs, ErrorKind::InvalidValue, err.to_string())))
   };
 
   loop {
@@ -101,25 +122,27 @@ pub(crate) fn parse(buf_src: &[u8]) -> Result<Module, Error> {
 
         let parse_type = |range: Range<usize>| {
           range
-            .map(|i| ValType::try_from(buf_src[i]))
+            .map(|ofs| {
+              ValType::try_from(buf_src[ofs])
+                .map_err(|err| Error::from((ofs, ErrorKind::InvalidValue, err.to_string())))
+            })
             .collect::<Result<Vec<_>, _>>()
-            .map_err(Error::InvalidValue)
         };
 
         let mut item_ofs = section_ofs + 1 + section_size_b + n_item_b;
         tmp_types = (0..n_item)
           .map(|_| {
             if buf_src[item_ofs] != 0x60 {
-              return Err(Error::InvalidValue(format!("not func type")));
+              return Err(Error::from((item_ofs, ErrorKind::InvalidValue, format!("not func type"))));
             }
 
             let (n_param, n_param_b) = decode_uleb128(&buf_src[(item_ofs + 1)..]);
             let (n_result, n_result_b) = decode_uleb128(&buf_src[(item_ofs + n_param_b + (n_param as usize) + 1)..]);
 
-            let param_ofs = item_ofs + 1;
+            let param_ofs = item_ofs + 1 + n_param_b;
             let param_types = parse_type(param_ofs..(param_ofs + (n_param as usize)))?;
 
-            let result_ofs = item_ofs + n_param_b + (n_param as usize) + n_result_b + 1;
+            let result_ofs = item_ofs + 1 + n_param_b + (n_param as usize) + n_result_b;
             let next_func_ofs = result_ofs + (n_result as usize);
             let result_types = parse_type(result_ofs..next_func_ofs)?;
 
@@ -132,7 +155,7 @@ pub(crate) fn parse(buf_src: &[u8]) -> Result<Module, Error> {
           })
           .collect::<Result<_, _>>()?;
 
-        finalize_section(section_ofs, section_size, item_ofs)
+        finalize_section(section_ofs, section_size, section_size_b)
       }
       // import section
       2 => {
@@ -160,7 +183,11 @@ pub(crate) fn parse(buf_src: &[u8]) -> Result<Module, Error> {
               1 => todo!(),
               2 => todo!(),
               3 => todo!(),
-              _ => return Err(Error::InvalidValue(format!("invalid import kind"))),
+              _ => return Err(Error::from((
+                kind_ofs,
+                ErrorKind::InvalidValue,
+                format!("invalid import kind")
+              ))),
             };
 
             item_ofs = kind_ofs + kind_b + 1;
@@ -173,7 +200,7 @@ pub(crate) fn parse(buf_src: &[u8]) -> Result<Module, Error> {
           })
           .collect::<Result<_, _>>()?;
 
-        finalize_section(section_ofs, section_size, item_ofs)
+        finalize_section(section_ofs, section_size, section_size_b)
       }
       // function section
       3 => {
@@ -189,9 +216,9 @@ pub(crate) fn parse(buf_src: &[u8]) -> Result<Module, Error> {
 
             Ok(type_pos)
           })
-          .collect::<Result<_, _>>()?;
+          .collect::<Result<_, Error>>()?;
 
-        finalize_section(section_ofs, section_size, item_ofs)
+        finalize_section(section_ofs, section_size, section_size_b)
       }
       // table section
       4 => {
@@ -216,7 +243,11 @@ pub(crate) fn parse(buf_src: &[u8]) -> Result<Module, Error> {
 
                 (limit_max_b, Some(limit_max))
               }
-              _ => return Err(Error::InvalidValue(format!("limit flag byte is invalid"))),
+              _ => return Err(Error::from((
+                item_ofs,
+                ErrorKind::InvalidValue,
+                format!("limit flag byte is invalid")
+              ))),
             };
 
             item_ofs += limit_initial_b + max_b + 1;
@@ -230,7 +261,7 @@ pub(crate) fn parse(buf_src: &[u8]) -> Result<Module, Error> {
           })
           .collect::<Result<_, _>>()?;
 
-        finalize_section(section_ofs, section_size, item_ofs)
+        finalize_section(section_ofs, section_size, section_size_b)
       }
       // global section
       6 => {
@@ -240,8 +271,10 @@ pub(crate) fn parse(buf_src: &[u8]) -> Result<Module, Error> {
         let mut item_ofs = section_ofs + section_size_b + n_item_b + 1;
         tmp_globals = (0..n_item)
           .map(|_| {
-            let global_valtype = ValType::try_from(buf_src[item_ofs]).map_err(Error::InvalidValue)?;
-            let global_mut = GlobalMut::try_from(buf_src[item_ofs + 1]).map_err(Error::InvalidValue)?;
+            let global_valtype = ValType::try_from(buf_src[item_ofs])
+              .map_err(|err| Error::from((item_ofs, ErrorKind::InvalidValue, err.to_string())))?;
+            let global_mut = GlobalMut::try_from(buf_src[item_ofs + 1])
+              .map_err(|err| Error::from((item_ofs + 1, ErrorKind::InvalidValue, err.to_string())))?;
 
             Ok(Global {
               mutable: global_mut,
@@ -249,9 +282,9 @@ pub(crate) fn parse(buf_src: &[u8]) -> Result<Module, Error> {
               value: todo!(),
             })
           })
-          .collect::<Result<_, _>>()?;
+          .collect::<Result<_, Error>>()?;
 
-        finalize_section(section_ofs, section_size, item_ofs)
+        finalize_section(section_ofs, section_size, section_size_b)
       }
       // export section
       7 => {
@@ -265,7 +298,8 @@ pub(crate) fn parse(buf_src: &[u8]) -> Result<Module, Error> {
             let export_name = parse_utf8(item_ofs + export_name_len_b, export_name_len as usize)?;
 
             let export_idx_ofs = item_ofs + export_name_len_b + (export_name_len as usize) + 1;
-            let export_desc = ExportDesc::try_from(buf_src[export_idx_ofs - 1]).map_err(Error::InvalidValue)?;
+            let export_desc = ExportDesc::try_from(buf_src[export_idx_ofs - 1])
+              .map_err(|err| Error::from((export_idx_ofs - 1, ErrorKind::InvalidValue, err.to_string())))?;
 
             let (export_idx, export_idx_b) = decode_uleb128(&buf_src[export_idx_ofs..]);
 
@@ -277,22 +311,18 @@ pub(crate) fn parse(buf_src: &[u8]) -> Result<Module, Error> {
               idx: export_idx as u32,
             })
           })
-          .collect::<Result<_, _>>()?;
+          .collect::<Result<_, Error>>()?;
 
-        finalize_section(section_ofs, section_size, item_ofs)
+        finalize_section(section_ofs, section_size, section_size_b)
       }
       // start section
       8 => {
         let (section_size, section_size_b) = decode_uleb128(&buf_src[(section_ofs + 1)..]);
-        let (start_func_idx, start_func_idx_b) = decode_uleb128(&buf_src[(section_ofs + section_size_b + 1)..]);
+        let (start_func_idx, _) = decode_uleb128(&buf_src[(section_ofs + section_size_b + 1)..]);
 
         tmp_start_func = Some(start_func_idx as u32);
 
-        finalize_section(
-          section_ofs,
-          section_size,
-          section_ofs + section_size_b + start_func_idx_b + 1,
-        )
+        finalize_section(section_ofs, section_size, section_size_b)
       }
       // element section
       9 => {
@@ -315,21 +345,22 @@ pub(crate) fn parse(buf_src: &[u8]) -> Result<Module, Error> {
               .map(|_| -> Result<Vec<_>, _> {
                 let (n_type_count, n_type_count_b) = decode_uleb128(&buf_src[local_ofs..]);
 
-                let valtype = ValType::try_from(buf_src[local_ofs + (n_type_count as usize)]).map_err(Error::InvalidValue)?;
+                let valtype = ValType::try_from(buf_src[local_ofs + (n_type_count as usize)])
+                  .map_err(|err| Error::from((local_ofs + (n_type_count as usize), ErrorKind::InvalidValue, err)))?;
 
                 local_ofs += n_type_count_b + 1;
 
                 Ok(iter::repeat(valtype).take(n_type_count as usize).collect())
               })
-              .collect::<Result<Vec<_>, _>>()?
+              .collect::<Result<Vec<_>, Error>>()?
               .into_iter()
               .flatten()
               .collect();
 
             let instr_ofs = if local_ofs == 0 { local_ofs + 1 } else { local_ofs };
-            let (parsed_body, parsed_body_b) = parse_func_body(buf_src, instr_ofs)?;
+            let parsed_body = parse_func_body(buf_src, instr_ofs)?;
 
-            item_ofs = finalize_section(item_ofs, body_size, instr_ofs + parsed_body_b);
+            item_ofs = finalize_section(item_ofs, body_size, body_size_b);
 
             Ok(Function {
               signature_idx: func_type_idx as u32,
@@ -337,9 +368,9 @@ pub(crate) fn parse(buf_src: &[u8]) -> Result<Module, Error> {
               parsed_body,
             })
           })
-          .collect::<Result<_, _>>()?;
+          .collect::<Result<_, Error>>()?;
 
-        finalize_section(section_ofs, section_size, item_ofs)
+        finalize_section(section_ofs, section_size, section_size_b)
       }
       // data section
       11 => {
@@ -350,11 +381,11 @@ pub(crate) fn parse(buf_src: &[u8]) -> Result<Module, Error> {
         todo!()
       }
       _ => {
-        return Err(Error::InvalidSectionFormat(format!(
-          "invalid section id {} at 0x{:07X}",
-          buf_src[section_ofs],
-          section_ofs
-        )))
+        return Err(Error::from((
+          section_ofs,
+          ErrorKind::InvalidSectionFormat,
+          format!("invalid section id {}", buf_src[section_ofs])
+        )));
       }
     }
   }
@@ -371,7 +402,7 @@ pub(crate) fn parse(buf_src: &[u8]) -> Result<Module, Error> {
   })
 }
 
-fn parse_func_body(src_bin: &[u8], code_ofs: usize) -> Result<(ParsedBody, usize), Error> {
+fn parse_func_body(src_bin: &[u8], code_ofs: usize) -> Result<ParsedBody, Error> {
   let mut instr_ofs = code_ofs;
   let mut instrs = vec![];
 
@@ -507,7 +538,11 @@ fn parse_func_body(src_bin: &[u8], code_ofs: usize) -> Result<(ParsedBody, usize
       0xA6 => (Instr::F64Copysign, 1),
 
       0x0B => break,
-      _ => return Err(Error::InvalidInstruction(format!("invalid instruction code {}", src_bin[instr_ofs])))
+      _ => return Err(Error::from((
+        instr_ofs,
+        ErrorKind::InvalidInstruction,
+        format!("invalid instruction code {}", src_bin[instr_ofs])
+      )))
     };
 
     instr_ofs += instr_b;
@@ -515,9 +550,7 @@ fn parse_func_body(src_bin: &[u8], code_ofs: usize) -> Result<(ParsedBody, usize
     instrs.push(instr);
   }
 
-  todo!();
-
-  Ok((ParsedBody::new(instrs), instr_ofs - code_ofs))
+  Ok(ParsedBody::new(instrs))
 }
 
 fn parse_expr(src_bin: &[u8], code_ofs: usize) -> Result<(), Error> {
