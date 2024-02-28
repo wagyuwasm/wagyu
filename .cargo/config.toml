@@ -1,0 +1,3 @@
+[alias]
+test-runtime-unit = "test -p wagyu-runtime --lib"
+test-runtime-intg = "test -p wagyu-runtime --test *"

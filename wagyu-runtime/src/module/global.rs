@@ -5,7 +5,7 @@ use super::value::{
 };
 
 pub(crate) struct Global {
-  pub(crate) kind: GlobalMut,
+  pub(crate) mutable: GlobalMut,
   pub(crate) valtype: ValType,
   pub(crate) value: Option<Value>,
 }
@@ -19,7 +19,7 @@ impl Global {
   }
 
   pub(crate) fn set(&mut self, val: Value) {
-    if matches!(self.kind, GlobalMut::Const) {
+    if matches!(self.mutable, GlobalMut::Const) {
       panic!("cannot set const global");
     }
 

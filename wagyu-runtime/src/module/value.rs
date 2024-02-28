@@ -10,6 +10,7 @@ pub(crate) type DataIdx = u32;
 pub(crate) type LocalIdx = u32;
 pub(crate) type LabelIdx = u32;
 
+#[derive(Clone)]
 pub(crate) enum ValType {
   I32,
   I64,

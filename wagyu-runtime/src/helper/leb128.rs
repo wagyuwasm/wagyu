@@ -13,8 +13,10 @@ use alloc::vec::Vec;
 /// # Example
 ///
 /// ```
+/// use wagyu_runtime::helper::leb128::encode_uleb128;
+///
 /// let value: u64 = 128;
-/// let encoded = encode_unsigned_leb128(value);
+/// let encoded = encode_uleb128(value);
 /// assert_eq!(encoded, vec![0x80, 0x01]);
 /// ```
 pub(crate) fn encode_uleb128<T: Into<u64>>(value: T) -> Vec<u8> {
@@ -49,8 +51,10 @@ pub(crate) fn encode_uleb128<T: Into<u64>>(value: T) -> Vec<u8> {
 /// # Example
 ///
 /// ```
+/// use wagyu_runtime::helper::leb128::decode_uleb128;
+///
 /// let encoded: Vec<u8> = vec![0x80, 0x01];
-/// let (decoded, count) = decode_unsigned_leb128(&encoded);
+/// let (decoded, count) = decode_uleb128(&encoded);
 /// assert_eq!(decoded, 128);
 /// assert_eq!(count, 2);
 /// ```
@@ -84,8 +88,10 @@ pub(crate) fn decode_uleb128(bytes: &[u8]) -> (u64, usize) {
 /// # Examples
 ///
 /// ```
+/// use wagyu_runtime::helper::leb128::encode_sleb128;
+///
 /// let value: i64 = -624485;
-/// let encoded = encode_signed_leb128(value);
+/// let encoded = encode_sleb128(value);
 /// assert_eq!(encoded, vec![0x9B, 0xF1, 0x59]);
 /// ```
 pub(crate) fn encode_sleb128<T: Into<i64>>(value: T) -> Vec<u8> {
@@ -123,8 +129,10 @@ pub(crate) fn encode_sleb128<T: Into<i64>>(value: T) -> Vec<u8> {
 /// # Examples
 ///
 /// ```
+/// use wagyu_runtime::helper::leb128::decode_sleb128;
+///
 /// let encoded: Vec<u8> = vec![0x9B, 0xF1, 0x59]; // Example encoded bytes
-/// let (decoded, count) = decode_signed_leb128(&encoded);
+/// let (decoded, count) = decode_sleb128(&encoded);
 /// assert_eq!(decoded, -624485);
 /// assert_eq!(count, 3);
 /// ```

@@ -3,45 +3,51 @@ use alloc::{
   vec::Vec,
 };
 use core::{
-  ops::Range,
-  ptr,
+  fmt, iter, ops::Range, ptr
 };
 
 use crate::{
-  helper::leb128::decode_uleb128,
-  instance::ModuleInstance,
-  module::{
-    export::Export,
-    function::{
+  helper::leb128::{decode_sleb128, decode_uleb128}, instr::Instr, module::{
+    export::Export, function::{
       Function,
       ParsedBody,
-    },
-    global::Global,
-    import::{
+    }, global::Global, import::{
       Import,
       ImportKind,
-    },
-    memory::Memory32,
-    types::Type,
-    value::{
+    }, memory::Memory32, types::Type, value::{
       ExportDesc,
       GlobalMut,
       ValType,
-    },
-  },
+    }, Module
+  }
 };
 
+#[derive(Debug)]
 pub enum Error {
   InvalidBinaryMagic,
   InvalidBinaryVersion,
   InvalidSectionFormat(String),
+  InvalidInstruction(String),
   InvalidValue(String),
   MissingSection(String),
 }
 
-pub(crate) fn parse(src_bin: &[u8]) -> Result<ModuleInstance, Error> {
-  let binary_magic = &src_bin[0..4];
-  let binary_version = &src_bin[4..8];
+impl fmt::Display for Error {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    match *self {
+      Error::InvalidBinaryMagic => write!(f, "Invalid binary magic"),
+      Error::InvalidBinaryVersion => write!(f, "Invalid binary version"),
+      Error::InvalidSectionFormat(ref s) => write!(f, "Invalid section format: {}", s),
+      Error::InvalidInstruction(ref s) => write!(f, "Invalid instruction: {}", s),
+      Error::InvalidValue(ref s) => write!(f, "Invalid value: {}", s),
+      Error::MissingSection(ref s) => write!(f, "Missing section: {}", s),
+    }
+  }
+}
+
+pub(crate) fn parse(buf_src: &[u8]) -> Result<Module, Error> {
+  let binary_magic = &buf_src[0..4];
+  let binary_version = &buf_src[4..8];
 
   if binary_magic != &[0x00, 0x61, 0x73, 0x6d] {
     return Err(Error::InvalidBinaryMagic);
@@ -65,7 +71,7 @@ pub(crate) fn parse(src_bin: &[u8]) -> Result<ModuleInstance, Error> {
   // Calculates the fixup size of a section if body size is not provided.
   let finalize_section = |section_ofs: usize, section_size: u64, fixup_ofs: usize| match section_size {
     0 => {
-      let (_, fixup_size_b) = decode_uleb128(&src_bin[fixup_ofs..]);
+      let (_, fixup_size_b) = decode_uleb128(&buf_src[fixup_ofs..]);
 
       fixup_ofs + fixup_size_b
     }
@@ -74,15 +80,15 @@ pub(crate) fn parse(src_bin: &[u8]) -> Result<ModuleInstance, Error> {
 
   // Parses string in a given offset and len to the reading source binary.
   let parse_utf8 = |ofs: usize, len: usize| {
-    String::from_utf8(Vec::from(&src_bin[ofs..(ofs + len)])).map_err(|err| Error::InvalidValue(format!("{}", err)))
+    String::from_utf8(Vec::from(&buf_src[ofs..(ofs + len)])).map_err(|err| Error::InvalidValue(format!("{}", err)))
   };
 
   loop {
-    if section_ofs >= src_bin.len() {
+    if section_ofs >= buf_src.len() {
       break;
     }
 
-    section_ofs = match src_bin[section_ofs] {
+    section_ofs = match buf_src[section_ofs] {
       // custom section
       0 => {
         // assumption: the custom section is the last section to be parsed, so we can skip this section.
@@ -90,27 +96,27 @@ pub(crate) fn parse(src_bin: &[u8]) -> Result<ModuleInstance, Error> {
       }
       // type section
       1 => {
-        let (section_size, section_size_b) = decode_uleb128(&src_bin[(section_ofs + 1)..]);
-        let (n_item, n_item_b) = decode_uleb128(&src_bin[(section_ofs + section_size_b + 1)..]);
+        let (section_size, section_size_b) = decode_uleb128(&buf_src[(section_ofs + 1)..]);
+        let (n_item, n_item_b) = decode_uleb128(&buf_src[(section_ofs + section_size_b + 1)..]);
 
         let parse_type = |range: Range<usize>| {
           range
-            .map(|i| ValType::try_from(src_bin[i]))
+            .map(|i| ValType::try_from(buf_src[i]))
             .collect::<Result<Vec<_>, _>>()
             .map_err(Error::InvalidValue)
         };
 
-        let mut item_ofs = section_ofs + section_size_b + n_item_b + 1;
+        let mut item_ofs = section_ofs + 1 + section_size_b + n_item_b;
         tmp_types = (0..n_item)
           .map(|_| {
-            if src_bin[item_ofs] != 0x60 {
+            if buf_src[item_ofs] != 0x60 {
               return Err(Error::InvalidValue(format!("not func type")));
             }
 
-            let (n_param, n_param_b) = decode_uleb128(&src_bin[(item_ofs + 1)..]);
-            let (n_result, n_result_b) = decode_uleb128(&src_bin[(item_ofs + n_param_b + (n_param as usize) + 1)..]);
+            let (n_param, n_param_b) = decode_uleb128(&buf_src[(item_ofs + 1)..]);
+            let (n_result, n_result_b) = decode_uleb128(&buf_src[(item_ofs + n_param_b + (n_param as usize) + 1)..]);
 
-            let param_ofs = item_ofs + n_param_b + 1;
+            let param_ofs = item_ofs + 1;
             let param_types = parse_type(param_ofs..(param_ofs + (n_param as usize)))?;
 
             let result_ofs = item_ofs + n_param_b + (n_param as usize) + n_result_b + 1;
@@ -130,24 +136,24 @@ pub(crate) fn parse(src_bin: &[u8]) -> Result<ModuleInstance, Error> {
       }
       // import section
       2 => {
-        let (section_size, section_size_b) = decode_uleb128(&src_bin[(section_ofs + 1)..]);
-        let (n_item, n_item_b) = decode_uleb128(&src_bin[(section_ofs + section_size_b + 1)..]);
+        let (section_size, section_size_b) = decode_uleb128(&buf_src[(section_ofs + 1)..]);
+        let (n_item, n_item_b) = decode_uleb128(&buf_src[(section_ofs + section_size_b + 1)..]);
 
         let mut item_ofs = section_ofs + section_size_b + n_item_b + 1;
         tmp_imports = (0..n_item)
           .map(|_| {
-            let (module_name_len, module_name_len_b) = decode_uleb128(&src_bin[item_ofs..]);
+            let (module_name_len, module_name_len_b) = decode_uleb128(&buf_src[item_ofs..]);
             let module_name = parse_utf8(item_ofs + module_name_len_b, module_name_len as usize)?;
 
             let (field_name_len, field_name_len_b) =
-              decode_uleb128(&src_bin[(item_ofs + module_name_len_b + (module_name_len as usize))..]);
+              decode_uleb128(&buf_src[(item_ofs + module_name_len_b + (module_name_len as usize))..]);
             let field_name_ofs = item_ofs + module_name_len_b + (module_name_len as usize) + field_name_len_b;
             let field_name = parse_utf8(field_name_ofs, field_name_len as usize)?;
 
             let kind_ofs = field_name_ofs + (field_name_len as usize);
-            let (kind, kind_b) = match src_bin[kind_ofs] {
+            let (kind, kind_b) = match buf_src[kind_ofs] {
               0 => {
-                let (type_idx, type_idx_b) = decode_uleb128(&src_bin[(kind_ofs + 1)..]);
+                let (type_idx, type_idx_b) = decode_uleb128(&buf_src[(kind_ofs + 1)..]);
 
                 (ImportKind::TypeIdx(type_idx as u32), type_idx_b)
               }
@@ -171,13 +177,13 @@ pub(crate) fn parse(src_bin: &[u8]) -> Result<ModuleInstance, Error> {
       }
       // function section
       3 => {
-        let (section_size, section_size_b) = decode_uleb128(&src_bin[(section_ofs + 1)..]);
-        let (n_item, n_item_b) = decode_uleb128(&src_bin[(section_ofs + section_size_b + 1)..]);
+        let (section_size, section_size_b) = decode_uleb128(&buf_src[(section_ofs + 1)..]);
+        let (n_item, n_item_b) = decode_uleb128(&buf_src[(section_ofs + section_size_b + 1)..]);
 
         let mut item_ofs = section_ofs + section_size_b + n_item_b + 1;
         tmp_function_types = (0..n_item)
           .map(|_| {
-            let (type_pos, type_pos_b) = decode_uleb128(&src_bin[item_ofs..]);
+            let (type_pos, type_pos_b) = decode_uleb128(&buf_src[item_ofs..]);
 
             item_ofs += type_pos_b;
 
@@ -193,20 +199,20 @@ pub(crate) fn parse(src_bin: &[u8]) -> Result<ModuleInstance, Error> {
       }
       // memory section
       5 => {
-        let (section_size, section_size_b) = decode_uleb128(&src_bin[(section_ofs + 1)..]);
-        let (n_item, n_item_b) = decode_uleb128(&src_bin[(section_ofs + section_size_b + 1)..]);
+        let (section_size, section_size_b) = decode_uleb128(&buf_src[(section_ofs + 1)..]);
+        let (n_item, n_item_b) = decode_uleb128(&buf_src[(section_ofs + section_size_b + 1)..]);
 
         let mut item_ofs = section_ofs + section_size_b + n_item_b + 1;
         tmp_memories = (0..n_item)
           .map(|_| {
-            let limit_flag = src_bin[item_ofs];
-            let (limit_initial, limit_initial_b) = decode_uleb128(&src_bin[(item_ofs + 1)..]);
+            let limit_flag = buf_src[item_ofs];
+            let (limit_initial, limit_initial_b) = decode_uleb128(&buf_src[(item_ofs + 1)..]);
 
             let (max_b, max) = match limit_flag {
               0 => (0, None),
               1 => {
                 let max_ofs = item_ofs + limit_initial_b + 1;
-                let (limit_max, limit_max_b) = decode_uleb128(&src_bin[max_ofs..]);
+                let (limit_max, limit_max_b) = decode_uleb128(&buf_src[max_ofs..]);
 
                 (limit_max_b, Some(limit_max))
               }
@@ -228,17 +234,17 @@ pub(crate) fn parse(src_bin: &[u8]) -> Result<ModuleInstance, Error> {
       }
       // global section
       6 => {
-        let (section_size, section_size_b) = decode_uleb128(&src_bin[(section_ofs + 1)..]);
-        let (n_item, n_item_b) = decode_uleb128(&src_bin[(section_ofs + section_size_b + 1)..]);
+        let (section_size, section_size_b) = decode_uleb128(&buf_src[(section_ofs + 1)..]);
+        let (n_item, n_item_b) = decode_uleb128(&buf_src[(section_ofs + section_size_b + 1)..]);
 
         let mut item_ofs = section_ofs + section_size_b + n_item_b + 1;
         tmp_globals = (0..n_item)
           .map(|_| {
-            let global_valtype = ValType::try_from(src_bin[item_ofs]).map_err(Error::InvalidValue)?;
-            let global_mut = GlobalMut::try_from(src_bin[item_ofs + 1]).map_err(Error::InvalidValue)?;
+            let global_valtype = ValType::try_from(buf_src[item_ofs]).map_err(Error::InvalidValue)?;
+            let global_mut = GlobalMut::try_from(buf_src[item_ofs + 1]).map_err(Error::InvalidValue)?;
 
             Ok(Global {
-              kind: global_mut,
+              mutable: global_mut,
               valtype: global_valtype,
               value: todo!(),
             })
@@ -249,19 +255,19 @@ pub(crate) fn parse(src_bin: &[u8]) -> Result<ModuleInstance, Error> {
       }
       // export section
       7 => {
-        let (section_size, section_size_b) = decode_uleb128(&src_bin[(section_ofs + 1)..]);
-        let (n_item, n_item_b) = decode_uleb128(&src_bin[(section_ofs + section_size_b + 1)..]);
+        let (section_size, section_size_b) = decode_uleb128(&buf_src[(section_ofs + 1)..]);
+        let (n_item, n_item_b) = decode_uleb128(&buf_src[(section_ofs + section_size_b + 1)..]);
 
         let mut item_ofs = section_ofs + section_size_b + n_item_b + 1;
         tmp_exports = (0..n_item)
           .map(|_| {
-            let (export_name_len, export_name_len_b) = decode_uleb128(&src_bin[item_ofs..]);
+            let (export_name_len, export_name_len_b) = decode_uleb128(&buf_src[item_ofs..]);
             let export_name = parse_utf8(item_ofs + export_name_len_b, export_name_len as usize)?;
 
             let export_idx_ofs = item_ofs + export_name_len_b + (export_name_len as usize) + 1;
-            let export_desc = ExportDesc::try_from(src_bin[export_idx_ofs - 1]).map_err(Error::InvalidValue)?;
+            let export_desc = ExportDesc::try_from(buf_src[export_idx_ofs - 1]).map_err(Error::InvalidValue)?;
 
-            let (export_idx, export_idx_b) = decode_uleb128(&src_bin[export_idx_ofs..]);
+            let (export_idx, export_idx_b) = decode_uleb128(&buf_src[export_idx_ofs..]);
 
             item_ofs = export_idx_ofs + export_idx_b;
 
@@ -277,8 +283,8 @@ pub(crate) fn parse(src_bin: &[u8]) -> Result<ModuleInstance, Error> {
       }
       // start section
       8 => {
-        let (section_size, section_size_b) = decode_uleb128(&src_bin[(section_ofs + 1)..]);
-        let (start_func_idx, start_func_idx_b) = decode_uleb128(&src_bin[(section_ofs + section_size_b + 1)..]);
+        let (section_size, section_size_b) = decode_uleb128(&buf_src[(section_ofs + 1)..]);
+        let (start_func_idx, start_func_idx_b) = decode_uleb128(&buf_src[(section_ofs + section_size_b + 1)..]);
 
         tmp_start_func = Some(start_func_idx as u32);
 
@@ -294,27 +300,40 @@ pub(crate) fn parse(src_bin: &[u8]) -> Result<ModuleInstance, Error> {
       }
       // code section
       10 => {
-        let (section_size, section_size_b) = decode_uleb128(&src_bin[(section_ofs + 1)..]);
-        let (n_item, n_item_b) = decode_uleb128(&src_bin[(section_ofs + section_size_b + 1)..]);
+        let (section_size, section_size_b) = decode_uleb128(&buf_src[(section_ofs + 1)..]);
+        let (n_item, n_item_b) = decode_uleb128(&buf_src[(section_ofs + section_size_b + 1)..]);
 
         let mut item_ofs = section_ofs + section_size_b + n_item_b + 1;
         tmp_functions = (0..n_item)
           .map(|i| {
             let func_type_idx = tmp_function_types[i as usize];
-            let (body_size, body_size_b) = decode_uleb128(&src_bin[item_ofs..]);
+            let (body_size, body_size_b) = decode_uleb128(&buf_src[item_ofs..]);
+            let (n_local, n_local_b) = decode_uleb128(&buf_src[(item_ofs + body_size_b)..]);
 
-            let (parsed_body, body_size_b) = if body_size > 0 {
-              (None, body_size_b)
-            } else {
-              let (parsed_body, parsed_body_b) = parse_func_body(src_bin, item_ofs)?;
+            let mut local_ofs = item_ofs + body_size_b + n_local_b;
+            let locals = (0..n_local)
+              .map(|_| -> Result<Vec<_>, _> {
+                let (n_type_count, n_type_count_b) = decode_uleb128(&buf_src[local_ofs..]);
 
-              (Some(parsed_body), parsed_body_b)
-            };
+                let valtype = ValType::try_from(buf_src[local_ofs + (n_type_count as usize)]).map_err(Error::InvalidValue)?;
 
-            item_ofs += body_size_b + 1;
+                local_ofs += n_type_count_b + 1;
+
+                Ok(iter::repeat(valtype).take(n_type_count as usize).collect())
+              })
+              .collect::<Result<Vec<_>, _>>()?
+              .into_iter()
+              .flatten()
+              .collect();
+
+            let instr_ofs = if local_ofs == 0 { local_ofs + 1 } else { local_ofs };
+            let (parsed_body, parsed_body_b) = parse_func_body(buf_src, instr_ofs)?;
+
+            item_ofs = finalize_section(item_ofs, body_size, instr_ofs + parsed_body_b);
 
             Ok(Function {
               signature_idx: func_type_idx as u32,
+              locals,
               parsed_body,
             })
           })
@@ -332,14 +351,15 @@ pub(crate) fn parse(src_bin: &[u8]) -> Result<ModuleInstance, Error> {
       }
       _ => {
         return Err(Error::InvalidSectionFormat(format!(
-          "invalid section id {}",
-          src_bin[section_ofs]
+          "invalid section id {} at 0x{:07X}",
+          buf_src[section_ofs],
+          section_ofs
         )))
       }
     }
   }
 
-  Ok(ModuleInstance {
+  Ok(Module {
     types: tmp_types,
     imports: tmp_imports,
     functions: tmp_functions,
@@ -352,7 +372,152 @@ pub(crate) fn parse(src_bin: &[u8]) -> Result<ModuleInstance, Error> {
 }
 
 fn parse_func_body(src_bin: &[u8], code_ofs: usize) -> Result<(ParsedBody, usize), Error> {
+  let mut instr_ofs = code_ofs;
+  let mut instrs = vec![];
+
+  loop {
+    let (instr, instr_b) = match src_bin[instr_ofs] {
+      0x1A => (Instr::Drop, 1),
+      0x1B => (Instr::Select(vec![]), 1),
+      0x1C => (Instr::Select(vec![todo!()]), 1 /* TODO: */),
+
+      0x41 => {
+        let (val, val_b) = decode_sleb128(&src_bin[(instr_ofs + 1)..]);
+        (Instr::I32Const(val as i32), 1 + val_b)
+      },
+      0x42 => {
+        let (val, val_b) = decode_sleb128(&src_bin[(instr_ofs + 1)..]);
+        (Instr::I64Const(val), 1 + val_b)
+      },
+      0x43 => {
+        let arr: [u8; 4] = src_bin[(instr_ofs + 1)..(instr_ofs + 1 + 4)].try_into().unwrap();
+        let val = f32::from_le_bytes(arr);
+        (Instr::F32Const(val), 1 + 4)
+      }
+      0x44 => {
+        let arr: [u8; 8] = src_bin[(instr_ofs + 1)..(instr_ofs + 1 + 8)].try_into().unwrap();
+        let val = f64::from_le_bytes(arr);
+        (Instr::F64Const(val), 1 + 4)
+      }
+
+      0x45 => (Instr::I32Eqz, 1),
+      0x46 => (Instr::I32Eq, 1),
+      0x47 => (Instr::I32Ne, 1),
+      0x48 => (Instr::I32LtS, 1),
+      0x49 => (Instr::I32LtU, 1),
+      0x4A => (Instr::I32GtS, 1),
+      0x4B => (Instr::I32GtU, 1),
+      0x4C => (Instr::I32LeS, 1),
+      0x4D => (Instr::I32LeU, 1),
+      0x4E => (Instr::I32GeS, 1),
+      0x4F => (Instr::I32GeU, 1),
+
+      0x50 => (Instr::I64Eqz, 1),
+      0x51 => (Instr::I64Eq, 1),
+      0x52 => (Instr::I64Ne, 1),
+      0x53 => (Instr::I64LtS, 1),
+      0x54 => (Instr::I64LtU, 1),
+      0x55 => (Instr::I64GtS, 1),
+      0x56 => (Instr::I64GtU, 1),
+      0x57 => (Instr::I64LeS, 1),
+      0x58 => (Instr::I64LeU, 1),
+      0x59 => (Instr::I64GeS, 1),
+      0x5A => (Instr::I64GeU, 1),
+
+      0x5B => (Instr::F32Eq, 1),
+      0x5C => (Instr::F32Ne, 1),
+      0x5D => (Instr::F32Lt, 1),
+      0x5E => (Instr::F32Gt, 1),
+      0x5F => (Instr::F32Le, 1),
+      0x60 => (Instr::F32Ge, 1),
+
+      0x61 => (Instr::F64Eq, 1),
+      0x62 => (Instr::F64Ne, 1),
+      0x63 => (Instr::F64Lt, 1),
+      0x64 => (Instr::F64Gt, 1),
+      0x65 => (Instr::F64Le, 1),
+      0x66 => (Instr::F64Ge, 1),
+
+      0x67 => (Instr::I32Clz, 1),
+      0x68 => (Instr::I32Ctz, 1),
+      0x69 => (Instr::I32Popcnt, 1),
+      0x6A => (Instr::I32Add, 1),
+      0x6B => (Instr::I32Sub, 1),
+      0x6C => (Instr::I32Mul, 1),
+      0x6D => (Instr::I32DivS, 1),
+      0x6E => (Instr::I32DivU, 1),
+      0x6F => (Instr::I32RemS, 1),
+      0x70 => (Instr::I32RemU, 1),
+      0x71 => (Instr::I32And, 1),
+      0x72 => (Instr::I32Or, 1),
+      0x73 => (Instr::I32Xor, 1),
+      0x74 => (Instr::I32Shl, 1),
+      0x75 => (Instr::I32ShrS, 1),
+      0x76 => (Instr::I32ShrU, 1),
+      0x77 => (Instr::I32Rotl, 1),
+      0x78 => (Instr::I32Rotr, 1),
+
+      0x79 => (Instr::I64Clz, 1),
+      0x7A => (Instr::I64Ctz, 1),
+      0x7B => (Instr::I64Popcnt, 1),
+      0x7C => (Instr::I64Add, 1),
+      0x7D => (Instr::I64Sub, 1),
+      0x7E => (Instr::I64Mul, 1),
+      0x7F => (Instr::I64DivS, 1),
+      0x80 => (Instr::I64DivU, 1),
+      0x81 => (Instr::I64RemS, 1),
+      0x82 => (Instr::I64RemU, 1),
+      0x83 => (Instr::I64And, 1),
+      0x84 => (Instr::I64Or, 1),
+      0x85 => (Instr::I64Xor, 1),
+      0x86 => (Instr::I64Shl, 1),
+      0x87 => (Instr::I64ShrS, 1),
+      0x88 => (Instr::I64ShrU, 1),
+      0x89 => (Instr::I64Rotl, 1),
+      0x8A => (Instr::I64Rotr, 1),
+
+      0x8B => (Instr::F32Abs, 1),
+      0x8C => (Instr::F32Neg, 1),
+      0x8D => (Instr::F32Ceil, 1),
+      0x8E => (Instr::F32Floor, 1),
+      0x8F => (Instr::F32Trunc, 1),
+      0x90 => (Instr::F32Nearest, 1),
+      0x91 => (Instr::F32Sqrt, 1),
+      0x92 => (Instr::F32Add, 1),
+      0x93 => (Instr::F32Sub, 1),
+      0x94 => (Instr::F32Mul, 1),
+      0x95 => (Instr::F32Div, 1),
+      0x96 => (Instr::F32Min, 1),
+      0x97 => (Instr::F32Max, 1),
+      0x98 => (Instr::F32Copysign, 1),
+
+      0x99 => (Instr::F64Abs, 1),
+      0x9A => (Instr::F64Neg, 1),
+      0x9B => (Instr::F64Ceil, 1),
+      0x9C => (Instr::F64Floor, 1),
+      0x9D => (Instr::F64Trunc, 1),
+      0x9E => (Instr::F64Nearest, 1),
+      0x9F => (Instr::F64Sqrt, 1),
+      0xA0 => (Instr::F64Add, 1),
+      0xA1 => (Instr::F64Sub, 1),
+      0xA2 => (Instr::F64Mul, 1),
+      0xA3 => (Instr::F64Div, 1),
+      0xA4 => (Instr::F64Min, 1),
+      0xA5 => (Instr::F64Max, 1),
+      0xA6 => (Instr::F64Copysign, 1),
+
+      0x0B => break,
+      _ => return Err(Error::InvalidInstruction(format!("invalid instruction code {}", src_bin[instr_ofs])))
+    };
+
+    instr_ofs += instr_b;
+
+    instrs.push(instr);
+  }
+
   todo!();
+
+  Ok((ParsedBody::new(instrs), instr_ofs - code_ofs))
 }
 
 fn parse_expr(src_bin: &[u8], code_ofs: usize) -> Result<(), Error> {

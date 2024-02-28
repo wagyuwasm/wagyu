@@ -30,7 +30,7 @@ pub(crate) enum Instr {
 
   // parametric instructions
   Drop,
-  Select,
+  Select(Vec<ValType>),
 
   // variable instructions
   LocalGet(LocalIdx),

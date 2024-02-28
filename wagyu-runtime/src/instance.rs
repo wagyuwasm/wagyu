@@ -1,37 +1,19 @@
-use alloc::vec::Vec;
+use crate::module::{value::Value, Module};
 
-use crate::{
-  module::{
-    export::Export,
-    function::Function,
-    global::Global,
-    import::Import,
-    memory::Memory32,
-    table::Table,
-    types::Type,
-    value::FuncIdx,
-  },
-  parse::{
-    parse,
-    Error,
-  },
-};
+pub(crate) type ImportObject<'a> = &'a [(&'a str, &'a [(&'a str, Value)])];
 
-pub struct ModuleInstance {
-  pub(crate) types: Vec<Type>,
-  pub(crate) imports: Vec<Import>,
-  pub(crate) functions: Vec<Function>,
-  pub(crate) tables: Vec<Table>,
-  pub(crate) memories: Vec<Memory32>,
-  pub(crate) globals: Vec<Global>,
-  pub(crate) exports: Vec<Export>,
-  pub(crate) start_func: Option<FuncIdx>,
+pub(crate) struct ModuleInstance<'a> {
+  import_obj: ImportObject<'a>,
+  module: Module,
 }
 
-impl ModuleInstance {
-  pub fn new(src_bin: &[u8]) -> Result<Self, Error> {
-    parse(src_bin)
+impl<'a> ModuleInstance<'a> {
+  pub(crate) const fn new(module: Module, import_obj: ImportObject<'a>) -> Self {
+    Self {
+      import_obj,
+      module
+    }
   }
 
-  pub fn run_start(&mut self) {}
+  pub(crate) fn run_start(&mut self) {}
 }
