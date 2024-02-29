@@ -28,8 +28,11 @@ fn parse_wasm_files() {
 
         println!("compiling: {file_path:?}");
 
-        if let Err(e) = compile(&buffer) {
-            err_messages.push(format!("{}) {file_path:?} {e}", err_messages.len() + 1));
+        match compile(&buffer) {
+            Err(e) => err_messages.push(format!("{}) {file_path:?} {e}", err_messages.len() + 1)),
+            Ok(module) => {
+                dbg!(module);
+            }
         }
     }
 

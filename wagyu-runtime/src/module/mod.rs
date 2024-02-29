@@ -11,6 +11,9 @@ use crate::module::{
   value::FuncIdx,
 };
 
+pub mod custom;
+pub mod data;
+pub mod elem;
 pub mod export;
 pub mod function;
 pub mod global;
@@ -20,6 +23,7 @@ pub mod table;
 pub mod types;
 pub mod value;
 
+#[derive(Debug)]
 pub struct Module {
   pub(crate) types: Vec<Type>,
   pub(crate) imports: Vec<Import>,

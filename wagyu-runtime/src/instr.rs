@@ -6,6 +6,7 @@ type LaneIdx = u8;
 type Offset = u32;
 type Align = u32;
 
+#[derive(Debug)]
 pub(crate) enum Instr {
   // control instructions
   Block,

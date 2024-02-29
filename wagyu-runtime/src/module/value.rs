@@ -10,7 +10,7 @@ pub(crate) type DataIdx = u32;
 pub(crate) type LocalIdx = u32;
 pub(crate) type LabelIdx = u32;
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub(crate) enum ValType {
   I32,
   I64,
@@ -49,13 +49,16 @@ impl TryFrom<u8> for ValType {
   }
 }
 
+#[derive(Debug)]
 pub(crate) enum RefType {
   FuncRef,
   ExternRef,
 }
 
+#[derive(Debug)]
 pub(crate) struct Limit(u32, Option<u32>);
 
+#[derive(Debug)]
 pub(crate) enum V128ConstValue {
   I8X16([i8; 16]),
   I16X8([i16; 8]),
@@ -65,11 +68,13 @@ pub(crate) enum V128ConstValue {
   F64X2([f64; 2]),
 }
 
+#[derive(Debug)]
 pub(crate) enum HeapType {
   Func,
   Extern,
 }
 
+#[derive(Debug)]
 pub(crate) enum ExportDesc {
   FuncIdx,
   TableIdx,
@@ -91,6 +96,7 @@ impl TryFrom<u8> for ExportDesc {
   }
 }
 
+#[derive(Debug)]
 pub(crate) enum GlobalMut {
   Const,
   Var,

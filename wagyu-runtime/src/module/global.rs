@@ -4,6 +4,7 @@ use super::value::{
   Value,
 };
 
+#[derive(Debug)]
 pub(crate) struct Global {
   pub(crate) mutable: GlobalMut,
   pub(crate) valtype: ValType,

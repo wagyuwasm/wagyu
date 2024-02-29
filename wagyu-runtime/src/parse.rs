@@ -112,8 +112,9 @@ pub(crate) fn parse(buf_src: &[u8]) -> Result<Module, Error> {
     section_ofs = match buf_src[section_ofs] {
       // custom section
       0 => {
-        // assumption: the custom section is the last section to be parsed, so we can skip this section.
-        break;
+        let (section_size, section_size_b) = decode_uleb128(&buf_src[(section_ofs + 1)..]);
+
+        finalize_section(section_ofs, section_size, section_size_b)
       }
       // type section
       1 => {
@@ -255,7 +256,7 @@ pub(crate) fn parse(buf_src: &[u8]) -> Result<Module, Error> {
             Ok(Memory32 {
               ptr: ptr::null_mut(),
               size: 0,
-              min: limit_initial as u32,
+              initial: limit_initial as u32,
               max: max.map(|x| x as u32),
             })
           })
@@ -408,6 +409,10 @@ fn parse_func_body(src_bin: &[u8], code_ofs: usize) -> Result<ParsedBody, Error>
 
   loop {
     let (instr, instr_b) = match src_bin[instr_ofs] {
+      0x00 => (Instr::Unreachable, 1),
+      0x01 => (Instr::Nop, 1),
+      0x0F => (Instr::Return, 1),
+
       0x1A => (Instr::Drop, 1),
       0x1B => (Instr::Select(vec![]), 1),
       0x1C => (Instr::Select(vec![todo!()]), 1 /* TODO: */),
