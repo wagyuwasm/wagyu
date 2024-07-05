@@ -1,17 +1,21 @@
 // #![no_std]
 
-use instance::{ImportObject, ModuleInstance};
+use instance::{
+  ImportObject,
+  ModuleInstance,
+};
 use module::Module;
 
 #[macro_use]
 extern crate alloc;
 
-pub mod module;
 pub mod executor;
 pub mod instance;
 pub mod instr;
+pub mod module;
 pub mod parse;
 pub mod stack;
+pub mod wasi;
 
 pub(crate) mod helper;
 

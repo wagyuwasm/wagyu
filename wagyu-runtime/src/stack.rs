@@ -1,5 +1,3 @@
-use alloc::vec::Vec;
-
 use crate::module::value::Value;
 
 pub struct Stack {
@@ -9,9 +7,21 @@ pub struct Stack {
 }
 
 pub struct OperandStack {
-  items: Vec<Value>,
+  len: usize,
+  stack: Vec<Value>,
 }
 
-pub struct ControlStack {}
+impl OperandStack {
+  pub fn new() -> Self {
+    Self {
+      len: 0,
+      stack: vec![]
+    }
+  }
+}
+
+pub struct ControlStack {
+  
+}
 
 pub struct CallStack {}

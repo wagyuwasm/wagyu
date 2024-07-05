@@ -1,3 +1,11 @@
+pub mod cli;
+pub mod clocks;
+pub mod filesystem;
+pub mod http;
+pub mod io;
+pub mod random;
+pub mod sockets;
+
 pub(crate) enum Error {
   /// No error occurred. System call completed successfully.
   Success = 0,

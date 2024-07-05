@@ -21,13 +21,13 @@ pub(crate) enum ValType {
   ExternRef,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub(crate) enum Value {
   I32(i32),
   I64(i64),
   F32(f32),
   F64(f64),
-  V128(u128),
+  V128(V128Value),
   FuncRef(u32),
   ExternRef(u32),
 }
@@ -51,15 +51,17 @@ impl TryFrom<u8> for ValType {
 
 #[derive(Debug)]
 pub(crate) enum RefType {
+  /// Denotes the infinite union of all references to functions, regardless of their function types.
   FuncRef,
+  /// Denotes the infinite union of all references to objects owned by the embedder and that can be passed into WebAssembly under this type.
   ExternRef,
 }
 
 #[derive(Debug)]
 pub(crate) struct Limit(u32, Option<u32>);
 
-#[derive(Debug)]
-pub(crate) enum V128ConstValue {
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum V128Value {
   I8X16([i8; 16]),
   I16X8([i16; 8]),
   I32X4([i32; 4]),
@@ -112,4 +114,10 @@ impl TryFrom<u8> for GlobalMut {
       _ => Err(format!("invalid global mut")),
     }
   }
+}
+
+#[derive(Debug)]
+pub(crate) enum DataMode {
+  Passive,
+  Active(MemIdx, u32),
 }

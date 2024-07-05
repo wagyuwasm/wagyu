@@ -1,5 +1,6 @@
 use alloc::alloc::{
   alloc,
+  dealloc,
   handle_alloc_error,
   realloc,
   Layout,
@@ -115,7 +116,6 @@ impl Memory32 {
   }
 
   /// Copies data from a passive data segment into a memory.
-  /// The target memory and source segment are given as immediates.
   ///
   /// * `dst` - Destination address.
   /// * `src` - Offset into the source segment.
@@ -132,9 +132,21 @@ impl Memory32 {
       if (src + n) as usize > data.len() {
         panic!("memory access out of bounds");
       }
-      
+
       let data_ptr = data[(src as usize)..].as_ptr();
       ptr::copy(data_ptr, self.ptr.add(dst as usize), n as usize);
     }
+  }
+}
+
+impl Drop for Memory32 {
+  fn drop(&mut self) {
+    if self.ptr.is_null() {
+      return;
+    }
+
+    let layout = Layout::from_size_align((self.size as usize) * PAGE_SIZE, ALIGN).unwrap();
+
+    unsafe { dealloc(self.ptr, layout) }
   }
 }

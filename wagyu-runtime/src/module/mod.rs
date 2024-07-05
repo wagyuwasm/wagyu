@@ -1,6 +1,8 @@
 use alloc::vec::Vec;
 
 use crate::module::{
+  custom::Custom,
+  data::Data,
   export::Export,
   function::Function,
   global::Global,
@@ -9,6 +11,7 @@ use crate::module::{
   table::Table,
   types::Type,
   value::FuncIdx,
+  elem::Element
 };
 
 pub mod custom;
@@ -25,6 +28,7 @@ pub mod value;
 
 #[derive(Debug)]
 pub struct Module {
+  pub(crate) customs: Vec<Custom>,
   pub(crate) types: Vec<Type>,
   pub(crate) imports: Vec<Import>,
   pub(crate) functions: Vec<Function>,
@@ -33,6 +37,8 @@ pub struct Module {
   pub(crate) globals: Vec<Global>,
   pub(crate) exports: Vec<Export>,
   pub(crate) start_func: Option<FuncIdx>,
+  pub(crate) elems: Vec<Element>,
+  pub(crate) data: Vec<Data>,
 }
 
 impl Module {

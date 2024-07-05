@@ -3,12 +3,20 @@ use alloc::{
   vec::Vec,
 };
 use core::{
-  fmt, iter, ops::Range, ptr
+  fmt,
+  iter,
+  ops::Range,
+  ptr,
 };
 
 use crate::{
-  helper::leb128::{decode_sleb128, decode_uleb128}, instr::Instr, module::{
-    export::Export, function::{
+  helper::leb128::{
+    decode_sleb128,
+    decode_uleb128,
+  },
+  instr::Instr,
+  module::{
+    data::Data, export::Export, function::{
       Function,
       ParsedBody,
     }, global::Global, import::{
@@ -18,8 +26,10 @@ use crate::{
       ExportDesc,
       GlobalMut,
       ValType,
+    }, value::{
+      DataMode
     }, Module
-  }
+  },
 };
 
 pub enum ErrorKind {
@@ -42,7 +52,7 @@ impl From<(usize, ErrorKind)> for Error {
     Self {
       message: String::new(),
       kind: value.1,
-      offset: value.0
+      offset: value.0,
     }
   }
 }
@@ -52,7 +62,7 @@ impl From<(usize, ErrorKind, String)> for Error {
     Self {
       message: value.2.to_owned(),
       kind: value.1,
-      offset: value.0
+      offset: value.0,
     }
   }
 }
@@ -83,6 +93,8 @@ pub(crate) fn parse(buf_src: &[u8]) -> Result<Module, Error> {
 
   let mut section_ofs = 8;
 
+  let mut tmp_data_count = 0;
+  let mut tmp_customs = Vec::new();
   let mut tmp_types = Vec::new();
   let mut tmp_imports = Vec::new();
   let mut tmp_function_types = Vec::new();
@@ -92,6 +104,8 @@ pub(crate) fn parse(buf_src: &[u8]) -> Result<Module, Error> {
   let mut tmp_globals = Vec::new();
   let mut tmp_exports = Vec::new();
   let mut tmp_start_func = None;
+  let mut tmp_elems = Vec::new();
+  let mut tmp_data = Vec::new();
 
   // Calculates the fixup size of a section if body size is not provided.
   let finalize_section = |section_ofs: usize, section_size: u64, section_size_b: usize| {
@@ -134,7 +148,11 @@ pub(crate) fn parse(buf_src: &[u8]) -> Result<Module, Error> {
         tmp_types = (0..n_item)
           .map(|_| {
             if buf_src[item_ofs] != 0x60 {
-              return Err(Error::from((item_ofs, ErrorKind::InvalidValue, format!("not func type"))));
+              return Err(Error::from((
+                item_ofs,
+                ErrorKind::InvalidValue,
+                format!("not func type"),
+              )));
             }
 
             let (n_param, n_param_b) = decode_uleb128(&buf_src[(item_ofs + 1)..]);
@@ -184,11 +202,13 @@ pub(crate) fn parse(buf_src: &[u8]) -> Result<Module, Error> {
               1 => todo!(),
               2 => todo!(),
               3 => todo!(),
-              _ => return Err(Error::from((
-                kind_ofs,
-                ErrorKind::InvalidValue,
-                format!("invalid import kind")
-              ))),
+              _ => {
+                return Err(Error::from((
+                  kind_ofs,
+                  ErrorKind::InvalidValue,
+                  format!("invalid import kind"),
+                )))
+              }
             };
 
             item_ofs = kind_ofs + kind_b + 1;
@@ -244,11 +264,13 @@ pub(crate) fn parse(buf_src: &[u8]) -> Result<Module, Error> {
 
                 (limit_max_b, Some(limit_max))
               }
-              _ => return Err(Error::from((
-                item_ofs,
-                ErrorKind::InvalidValue,
-                format!("limit flag byte is invalid")
-              ))),
+              _ => {
+                return Err(Error::from((
+                  item_ofs,
+                  ErrorKind::InvalidValue,
+                  format!("limit flag byte is invalid"),
+                )))
+              }
             };
 
             item_ofs += limit_initial_b + max_b + 1;
@@ -375,23 +397,63 @@ pub(crate) fn parse(buf_src: &[u8]) -> Result<Module, Error> {
       }
       // data section
       11 => {
-        todo!()
+        let (section_size, section_size_b) = decode_uleb128(&buf_src[(section_ofs + 1)..]);
+        let (n_item, n_item_b) = decode_uleb128(&buf_src[(section_ofs + section_size_b + 1)..]);
+
+        let mut item_ofs = section_ofs + section_size_b + n_item_b + 1;
+        tmp_data = (0..n_item)
+          .map(|_| {
+            let segment_flag = buf_src[item_ofs];
+
+            match segment_flag {
+              0 => todo!(),
+              1 => {
+                let (data_size, data_size_n) = decode_uleb128(&buf_src[(item_ofs + 1)..]);
+
+                let data = parse_utf8(item_ofs + 1 + data_size_n, data_size as usize)?;
+
+                item_ofs += 1 + data_size_n + (data_size as usize);
+
+                Ok(Data {
+                  mode: DataMode::Passive,
+                  data
+                })
+              },
+              2 => todo!(),
+              _ => {
+                Err(Error::from((
+                  item_ofs,
+                  ErrorKind::InvalidValue,
+                  format!("invalid data segment flag"),
+                )))
+              }
+            }
+          })
+          .collect::<Result<_, Error>>()?;
+
+        finalize_section(section_ofs, section_size, section_size_b)
       }
       // data count section
       12 => {
-        todo!()
+        let (section_size, section_size_b) = decode_uleb128(&buf_src[(section_ofs + 1)..]);
+        let (n_data, _) = decode_uleb128(&buf_src[(section_ofs + section_size_b + 1)..]);
+
+        tmp_data_count = n_data;
+
+        finalize_section(section_ofs, section_size, section_size_b)
       }
       _ => {
         return Err(Error::from((
           section_ofs,
           ErrorKind::InvalidSectionFormat,
-          format!("invalid section id {}", buf_src[section_ofs])
+          format!("invalid section id {}", buf_src[section_ofs]),
         )));
       }
     }
   }
 
   Ok(Module {
+    customs: tmp_customs,
     types: tmp_types,
     imports: tmp_imports,
     functions: tmp_functions,
@@ -400,6 +462,8 @@ pub(crate) fn parse(buf_src: &[u8]) -> Result<Module, Error> {
     globals: tmp_globals,
     exports: tmp_exports,
     start_func: tmp_start_func,
+    elems: tmp_elems,
+    data: tmp_data
   })
 }
 
@@ -420,11 +484,11 @@ fn parse_func_body(src_bin: &[u8], code_ofs: usize) -> Result<ParsedBody, Error>
       0x41 => {
         let (val, val_b) = decode_sleb128(&src_bin[(instr_ofs + 1)..]);
         (Instr::I32Const(val as i32), 1 + val_b)
-      },
+      }
       0x42 => {
         let (val, val_b) = decode_sleb128(&src_bin[(instr_ofs + 1)..]);
         (Instr::I64Const(val), 1 + val_b)
-      },
+      }
       0x43 => {
         let arr: [u8; 4] = src_bin[(instr_ofs + 1)..(instr_ofs + 1 + 4)].try_into().unwrap();
         let val = f32::from_le_bytes(arr);
@@ -543,11 +607,13 @@ fn parse_func_body(src_bin: &[u8], code_ofs: usize) -> Result<ParsedBody, Error>
       0xA6 => (Instr::F64Copysign, 1),
 
       0x0B => break,
-      _ => return Err(Error::from((
-        instr_ofs,
-        ErrorKind::InvalidInstruction,
-        format!("invalid instruction code {}", src_bin[instr_ofs])
-      )))
+      _ => {
+        return Err(Error::from((
+          instr_ofs,
+          ErrorKind::InvalidInstruction,
+          format!("invalid instruction code {}", src_bin[instr_ofs]),
+        )))
+      }
     };
 
     instr_ofs += instr_b;

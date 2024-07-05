@@ -257,7 +257,7 @@ pub(crate) enum Instr {
   V128Store32Lane(MemIdx, Offset, Align, LaneIdx),
   V128Store64Lane(MemIdx, Offset, Align, LaneIdx),
 
-  V128Const(V128ConstValue),
+  V128Const(V128Value),
 
   I8X16Shuffle([u8; 16]),
   I8X16Swizzle,

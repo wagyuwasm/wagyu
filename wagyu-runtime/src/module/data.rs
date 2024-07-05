@@ -1,6 +1,9 @@
+use super::value::DataMode;
+
+#[derive(Debug)]
 pub struct Data {
-  is_active: bool,
-  data: String
+  pub(crate) mode: DataMode,
+  pub(crate) data: String,
 }
 
 impl Data {

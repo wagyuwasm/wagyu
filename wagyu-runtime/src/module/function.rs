@@ -1,8 +1,10 @@
 use alloc::vec::Vec;
 
+use super::value::{
+  TypeIdx,
+  ValType,
+};
 use crate::instr::Instr;
-
-use super::value::{TypeIdx, ValType};
 
 #[derive(Debug)]
 pub(crate) struct Function {
